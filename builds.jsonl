@@ -1,0 +1,4 @@
+{"player":"Nicolas","cost":300,"weapon":{"name":"Laser","level":2},"armor":{"name":"Titanium","level":2},"module":{"type":"CPU","level":2}}
+{"player":"Enzo","cost":425,"weapon":{"name":"Laser","level":2},"armor":{"name":"Titanium","level":3},"module":{"type":"BATERIA","level":2}}
+{"player":"Enzo","cost":375,"weapon":{"name":"Laser","level":3},"armor":{"name":"Titanium","level":1},"module":{"type":"CPU","level":2}}
+{"player":"Nicolas","cost":390,"weapon":{"name":"Laser","level":3},"armor":{"name":"Titanium","level":2},"module":{"type":"MOBILIDADE","level":1}}
