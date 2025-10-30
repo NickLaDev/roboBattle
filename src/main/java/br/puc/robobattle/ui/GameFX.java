@@ -1,39 +1,62 @@
 package br.puc.robobattle.ui;
 
 import br.puc.robobattle.items.Armor;
-import br.puc.robobattle.items.Module;
 import br.puc.robobattle.items.Weapon;
 import br.puc.robobattle.model.Player;
 import br.puc.robobattle.model.Robot;
 import javafx.application.Application;
+import javafx.beans.property.IntegerProperty;
+import javafx.beans.property.SimpleIntegerProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
+import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.image.Image;
+import javafx.scene.image.ImageView;
+import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
+import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
 import javafx.stage.Stage;
 
+import java.io.InputStream;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.function.IntSupplier;
+import java.util.function.IntUnaryOperator;
+
 public class GameFX extends Application {
 
-    // ====== CONFIG GERAL ======
-    private static final int START_CREDITS = 1000;           // créditos iniciais
-    private static int costLinear(int lvl) { return 100 * lvl; } // 0,100,200,300,400,500
+    // ===== Config de layout da tela de nomes (igual à versão que rodava) =====
+    private static final double DESIGN_W = 1344.0;
+    private static final double DESIGN_H = 768.0;
 
-    // ====== ESTADO DA APP ======
+    private static final double SLOT1_X = 490, SLOT1_Y = 402, SLOT1_W = 305, SLOT1_H = 52;
+    private static final double SLOT2_X = 490, SLOT2_Y = 472, SLOT2_W = 305, SLOT2_H = 52;
+    private static final double ENTER_X = 531, ENTER_Y = 550, ENTER_W = 230, ENTER_H = 54;
+
+    private static final int FIELD_FONT_SIZE = 22;
+
+    // ===== Recursos =====
+    private static final String INTRO_BG = "/assets/ui/intro.png";
+    private static final String SHOP_BG  = "/assets/ui/shop.png";
+    private static final String SWORD_FMT  = "/assets/items/swords/sword%d.png";
+    private static final String SHIELD_FMT = "/assets/items/shields/shield%d.png";
+
+    // ===== Jogo =====
+    private static final int START_CREDITS = 1000;
+
     private Stage stage;
     private Player p1, p2;
-    private Purchase pur1, pur2; // compras confirmadas
+    private Purchase pur1, pur2;
     private UiBattleEngine engine;
 
-    // ====== DTO de compra ======
+    // Carrinho da compra daquele jogador
     public static class Purchase {
         public final Robot robot;
         public final int totalCost;
-        public Purchase(Robot robot, int totalCost) {
-            this.robot = robot;
-            this.totalCost = totalCost;
-        }
+        public Purchase(Robot robot, int totalCost) { this.robot = robot; this.totalCost = totalCost; }
     }
 
     @Override
@@ -45,226 +68,378 @@ public class GameFX extends Application {
     }
 
     // ==========================
-    // 1) TELA DE NOMES
+    // 1) Tela de nomes (mesma base)
     // ==========================
     private void showNameScreen() {
-        TextField tf1 = new TextField(); tf1.setPromptText("Nome do Jogador 1");
-        TextField tf2 = new TextField(); tf2.setPromptText("Nome do Jogador 2");
-        Button avancar = new Button("Avançar para a Loja");
+        Image bg = load(INTRO_BG);
+        final double IMG_W = bg.getWidth();
+        final double IMG_H = bg.getHeight();
 
-        VBox box = new VBox(12,
-                title("Configurar jogadores"),
-                new Label("Informe os nomes:"),
-                tf1, tf2,
-                avancar);
-        box.setPadding(new Insets(16));
-        box.setAlignment(Pos.CENTER_LEFT);
+        Pane board = new Pane();
+        board.setPrefSize(IMG_W, IMG_H);
+        board.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setBackground(new Background(new BackgroundImage(
+                bg, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER, new BackgroundSize(IMG_W, IMG_H, false, false, false, false))));
 
-        avancar.setOnAction(e -> {
-            String n1 = tf1.getText().trim().isEmpty() ? "Jogador 1" : tf1.getText().trim();
-            String n2 = tf2.getText().trim().isEmpty() ? "Jogador 2" : tf2.getText().trim();
+        TextField tf1 = buildLoginField();
+        TextField tf2 = buildLoginField();
+        placePx(tf1, SLOT1_X, SLOT1_Y, SLOT1_W, SLOT1_H, IMG_W, IMG_H);
+        placePx(tf2, SLOT2_X, SLOT2_Y, SLOT2_W, SLOT2_H, IMG_W, IMG_H);
+
+        Button enterBtn = new Button();
+        enterBtn.setOpacity(0.0); // invisível sobre a arte
+        enterBtn.setBackground(Background.EMPTY);
+        enterBtn.setBorder(Border.EMPTY);
+        placePx(enterBtn, ENTER_X, ENTER_Y, ENTER_W, ENTER_H, IMG_W, IMG_H);
+
+        board.getChildren().addAll(tf1, tf2, enterBtn);
+
+        StackPane root = new StackPane(board);
+        root.setStyle("-fx-background-color: black;");
+        Scene scene = new Scene(root, 1280, 720);
+
+        Runnable rescale = () -> {
+            double s = Math.min(scene.getWidth() / IMG_W, scene.getHeight() / IMG_H);
+            board.setScaleX(s);
+            board.setScaleY(s);
+        };
+        scene.widthProperty().addListener((o, a, b) -> rescale.run());
+        scene.heightProperty().addListener((o, a, b) -> rescale.run());
+        rescale.run();
+
+        Runnable submit = () -> {
+            String n1 = (tf1.getText() == null || tf1.getText().isBlank()) ? "Jogador 1" : tf1.getText().trim();
+            String n2 = (tf2.getText() == null || tf2.getText().isBlank()) ? "Jogador 2" : tf2.getText().trim();
             p1 = new Player(n1, START_CREDITS);
             p2 = new Player(n2, START_CREDITS);
             showShopScreen(p1, true);
+        };
+        enterBtn.setOnAction(e -> submit.run());
+        scene.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ENTER) submit.run();
+            if (e.getCode() == KeyCode.ESCAPE) stage.close();
         });
 
-        stage.setScene(new Scene(box, 980, 640));
+        tf1.requestFocus();
+        stage.setScene(scene);
+        stage.centerOnScreen();
+    }
+
+    private TextField buildLoginField() {
+        TextField tf = new TextField();
+        tf.setBackground(Background.EMPTY);
+        tf.setBorder(Border.EMPTY);
+        tf.setAlignment(Pos.CENTER_LEFT);
+        tf.setPadding(new Insets(0, 10, 0, 10));
+        tf.setFont(Font.font(FIELD_FONT_SIZE));
+        tf.setStyle("""
+            -fx-background-color: transparent;
+            -fx-background-insets: 0;
+            -fx-background-radius: 0;
+            -fx-border-color: transparent;
+            -fx-text-fill: #EDE9FE;
+            -fx-prompt-text-fill: rgba(229,231,235,0.75);
+            -fx-caret-color: #BB86FC;
+            -fx-highlight-fill: rgba(187,134,252,0.35);
+            -fx-highlight-text-fill: white;
+        """);
+        return tf;
+    }
+
+    private Label bold(String text) {
+        Label l = new Label(text);
+        l.setStyle("-fx-font-weight: bold;");
+        return l;
+    }
+
+
+
+    private static void placePx(Region node, double x, double y, double w, double h, double imgW, double imgH) {
+        double sx = imgW / DESIGN_W;
+        double sy = imgH / DESIGN_H;
+        node.setLayoutX(x * sx);
+        node.setLayoutY(y * sy);
+        node.setPrefSize(w * sx, h * sy);
     }
 
     // ==========================
-    // 2) TELA DA LOJA (por jogador)
+    // 2) Loja (com background novo e sem tabelas)
     // ==========================
     private void showShopScreen(Player player, boolean isFirstPlayer) {
         final int credits = player.credits();
 
         // seleção
-        ComboBox<Integer> cbW = comboLevels(); // arma
-        ComboBox<Integer> cbA = comboLevels(); // armadura
-        ComboBox<Integer> cbM = comboLevels(); // módulo
-        ComboBox<Module.Type> cbT = new ComboBox<>();
-        cbT.getItems().addAll(Module.Type.values());
-        cbT.getSelectionModel().selectFirst();
+        IntegerProperty weaponLvl = new SimpleIntegerProperty(0);
+        IntegerProperty armorLvl  = new SimpleIntegerProperty(0);
 
-        // tabelas de preço
-        TextArea tabW = priceTable("ARMA", credits, 0);
-        TextArea tabA = priceTable("ARMADURA", credits, 0);
-        TextArea tabM = priceTable("MÓDULO", credits, 0);
-        tabW.setPrefRowCount(8); tabA.setPrefRowCount(8); tabM.setPrefRowCount(8);
+        // custo real pelas classes
+        IntUnaryOperator weaponCost = lvl -> (lvl <= 0) ? 0 : new Weapon("N"+lvl, lvl).getCost();
+        IntUnaryOperator armorCost  = lvl -> (lvl <= 0) ? 0 : new Armor("N"+lvl, lvl).getCost();
 
-        // resumo dinâmico
-        Label lblCred = new Label("Créditos: " + credits);
+        // ===== fundo =====
+        ImageView bg = new ImageView(load(SHOP_BG));
+        bg.setPreserveRatio(true);
+        bg.setSmooth(true);
+        bg.setCache(true);
+
+        // ===== overlays =====
+        BorderPane overlay = new BorderPane();
+        overlay.setPickOnBounds(false);
+        overlay.setPadding(new Insets(16));
+
+        // tiras de seleção (com badge de preço apenas)
+        StripControl swords = itemStrip(
+                "ESPADAS", SWORD_FMT, "Sem arma", weaponLvl,
+                () -> credits - armorCost.applyAsInt(armorLvl.get()),
+                weaponCost
+        );
+        StripControl shields = itemStrip(
+                "ESCUDOS", SHIELD_FMT, "Sem escudo", armorLvl,
+                () -> credits - weaponCost.applyAsInt(weaponLvl.get()),
+                armorCost
+        );
+
+        // quando um lado muda, o outro recalcula a acessibilidade (cores dos badges)
+        weaponLvl.addListener((o,a,b) -> shields.refresh.run());
+        armorLvl.addListener((o,a,b) -> swords.refresh.run());
+
+        // prévias grandes
+        ImageView swordPreview  = bigPreview();
+        ImageView shieldPreview = bigPreview();
+        bindPreview(weaponLvl, swordPreview, SWORD_FMT);
+        bindPreview(armorLvl,  shieldPreview, SHIELD_FMT);
+
+        HBox previews = new HBox(24,
+                translucentCard("Arma escolhida", swordPreview),
+                translucentCard("Escudo escolhido", shieldPreview)
+        );
+        previews.setAlignment(Pos.CENTER);
+
+        // barra inferior
+        Label lblCred = bold("Créditos: " + credits);
         Label lblSubtotal = new Label("Subtotal: 0");
         Label lblSaldo = new Label("Saldo pós-compra: " + credits);
-        Label lblStats = new Label("Pré-visualização: —");
+        lblCred.setTextFill(Color.web("#EDE9FE"));
+        lblSubtotal.setTextFill(Color.web("#EDE9FE"));
+        lblSaldo.setTextFill(Color.web("#EDE9FE"));
+
         Button btnPreview = new Button("Pré-visualizar");
         Button btnConfirm = new Button("Confirmar compra");
 
-        // atualiza tabelas com base no subtotal (mostra saldo restante se comprar tal nível)
-        Runnable refreshTables = () -> {
-            int weaponCost = costLinear(get(cbW));
-            int armorCost  = costLinear(get(cbA));
-            int moduleCost = costLinear(get(cbM));
-            int subtotal = weaponCost + armorCost + moduleCost;
+        HBox bottom = new HBox(16, btnPreview, new Region(), lblCred, lblSubtotal, lblSaldo, btnConfirm);
+        HBox.setHgrow(bottom.getChildren().get(1), Priority.ALWAYS);
+        bottom.setAlignment(Pos.CENTER_LEFT);
+        bottom.setPadding(new Insets(8));
+        bottom.setStyle("-fx-background-color: rgba(0,0,0,0.35); -fx-background-radius: 10;");
 
-            tabW.setText(buildPriceTable("ARMA", credits, 0));
-            tabA.setText(buildPriceTable("ARMADURA", credits, weaponCost));
-            tabM.setText(buildPriceTable("MÓDULO", credits, weaponCost + armorCost));
+        VBox center = new VBox(24, previews, bottom);
+        center.setAlignment(Pos.BOTTOM_CENTER);
+        center.setPadding(new Insets(0, 32, 24, 32));
 
-            lblSubtotal.setText("Subtotal: " + subtotal);
-            lblSaldo.setText("Saldo pós-compra: " + (credits - subtotal));
+        VBox left  = new VBox(8, header("ESPADAS"), swords.node);
+        VBox right = new VBox(8, header("ESCUDOS"), shields.node);
+        left.setAlignment(Pos.TOP_LEFT);
+        right.setAlignment(Pos.TOP_RIGHT);
+
+        overlay.setLeft(left);
+        overlay.setRight(right);
+        overlay.setCenter(center);
+        BorderPane.setMargin(left, new Insets(40, 0, 0, 40));
+        BorderPane.setMargin(right, new Insets(40, 40, 0, 0));
+
+        // root com background
+        StackPane root = new StackPane(bg, overlay);
+        Scene scene = new Scene(root, 1160, 700);
+        bg.fitWidthProperty().bind(scene.widthProperty());
+        bg.fitHeightProperty().bind(scene.heightProperty());
+
+        // resumo
+        Runnable refreshSummary = () -> {
+            int sub = weaponCost.applyAsInt(weaponLvl.get()) + armorCost.applyAsInt(armorLvl.get());
+            lblSubtotal.setText("Subtotal: " + sub);
+            int saldo = credits - sub;
+            lblSaldo.setText("Saldo pós-compra: " + saldo);
+            lblSaldo.setTextFill(saldo < 0 ? Color.web("#F87171") : Color.web("#EDE9FE"));
         };
-
-        cbW.setOnAction(e -> refreshTables.run());
-        cbA.setOnAction(e -> refreshTables.run());
-        cbM.setOnAction(e -> refreshTables.run());
+        weaponLvl.addListener((o,a,b) -> refreshSummary.run());
+        armorLvl.addListener((o,a,b) -> refreshSummary.run());
+        refreshSummary.run();
 
         btnPreview.setOnAction(e -> {
-            int wLvl = get(cbW), aLvl = get(cbA), mLvl = get(cbM);
-            Module.Type type = cbT.getValue();
-            Purchase p = buildPurchase(credits, wLvl, aLvl, mLvl, type);
-            if (p == null) {
-                alert("Créditos insuficientes para esta configuração.");
-                return;
-            }
-            lblStats.setText(String.format(
-                    "Prévia → HP=%d  ATK=%d  DEF=%d  CRIT=%.1f%%  EVADE=%.1f%%  SPECIAL=%s",
+            Purchase p = buildPurchase(credits, weaponLvl.get(), armorLvl.get(), weaponCost, armorCost);
+            if (p == null) { alert("Créditos insuficientes para esta configuração."); return; }
+            alert(String.format(
+                    "Prévia:\nHP=%d  ATK=%d  DEF=%d  CRIT=%.1f%%  EVADE=%.1f%%",
                     p.robot.stats().maxHp, p.robot.stats().atk, p.robot.stats().def,
-                    p.robot.stats().crit * 100, p.robot.stats().evade * 100,
-                    p.robot.isSpecialAvailable() ? "SIM (BATERIA)" : "NÃO"
+                    p.robot.stats().crit*100, p.robot.stats().evade*100
             ));
         });
 
         btnConfirm.setOnAction(e -> {
-            int wLvl = get(cbW), aLvl = get(cbA), mLvl = get(cbM);
-            Module.Type type = cbT.getValue();
-            Purchase p = buildPurchase(credits, wLvl, aLvl, mLvl, type);
-            if (p == null) {
-                alert("Créditos insuficientes para esta configuração.");
-                return;
-            }
-            if (!player.buyAndEquip(p.robot, p.totalCost)) {
-                alert("Falha ao equipar. Tente novamente.");
-                return;
-            }
-            if (isFirstPlayer) {
-                pur1 = p;
-                showShopScreen(p2, false);  // passa para o jogador 2
-            } else {
-                pur2 = p;
-                showBattleScreen();         // inicia a batalha em Pixel Art
-            }
+            Purchase p = buildPurchase(credits, weaponLvl.get(), armorLvl.get(), weaponCost, armorCost);
+            if (p == null) { alert("Créditos insuficientes para esta configuração."); return; }
+            if (!player.buyAndEquip(p.robot, p.totalCost)) { alert("Falha ao equipar. Tente novamente."); return; }
+            if (isFirstPlayer) { pur1 = p; showShopScreen(p2, false); }
+            else { pur2 = p; showBattleScreen(); }
         });
 
-        GridPane gridSel = new GridPane();
-        gridSel.setHgap(12); gridSel.setVgap(8);
-        gridSel.add(new Label("Arma (nível)"), 0, 0); gridSel.add(cbW, 1, 0);
-        gridSel.add(new Label("Armadura (nível)"), 0, 1); gridSel.add(cbA, 1, 1);
-        gridSel.add(new Label("Módulo (nível)"), 0, 2); gridSel.add(cbM, 1, 2);
-        gridSel.add(new Label("Tipo de Módulo"), 0, 3); gridSel.add(cbT, 1, 3);
-        gridSel.add(new Label(" "), 0, 4); gridSel.add(btnPreview, 1, 4);
-        gridSel.add(lblStats, 0, 5, 2, 1);
-
-        HBox priceTables = new HBox(12,
-                card("Tabela ARMA", tabW),
-                card("Tabela ARMADURA", tabA),
-                card("Tabela MÓDULO", tabM));
-        priceTables.setAlignment(Pos.CENTER_LEFT);
-
-        HBox bottom = new HBox(16, lblCred, lblSubtotal, lblSaldo, btnConfirm);
-        bottom.setAlignment(Pos.CENTER_LEFT);
-
-        VBox root = new VBox(12,
-                title("Loja de " + player.name() + " — Créditos: " + credits),
-                priceTables,
-                card("Seleção", gridSel),
-                bottom
-        );
-        root.setPadding(new Insets(16));
-
-        // estado inicial
-        refreshTables.run();
-
-        stage.setScene(new Scene(root, 980, 640));
+        stage.setScene(scene);
     }
 
-    private ComboBox<Integer> comboLevels() {
-        ComboBox<Integer> cb = new ComboBox<>();
-        cb.getItems().addAll(0,1,2,3,4,5);
-        cb.getSelectionModel().select(0);
-        cb.setPrefWidth(90);
-        return cb;
-    }
-
-    private TextArea priceTable(String label, int credits, int subtotal) {
-        TextArea ta = new TextArea(buildPriceTable(label, credits, subtotal));
-        ta.setEditable(false); ta.setPrefColumnCount(18);
-        return ta;
-    }
-
-    private String buildPriceTable(String label, int credits, int subtotal) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(String.format("%s\nNível | Preço | Saldo se comprar\n", label));
-        sb.append("-------------------------------\n");
-        for (int lvl = 0; lvl <= 5; lvl++) {
-            int cost = costLinear(lvl);
-            int remaining = credits - (subtotal + cost);
-            sb.append(String.format("%5d | %5d | %d\n", lvl, cost, remaining));
-        }
-        return sb.toString();
-    }
-
-    private int get(ComboBox<Integer> cb) { return cb.getValue() == null ? 0 : cb.getValue(); }
-
-    private Purchase buildPurchase(int credits, int wLvl, int aLvl, int mLvl, Module.Type mType) {
-        int weaponCost = costLinear(wLvl);
-        int armorCost  = costLinear(aLvl);
-        int moduleCost = costLinear(mLvl);
-        int total = weaponCost + armorCost + moduleCost;
-        if (total > credits) return null;
-
-        Weapon w = new Weapon("Arma N" + wLvl, wLvl);
-        Armor  a = new Armor("Armadura N" + aLvl, aLvl);
-        Module m = new Module(mType, mLvl);
-        Robot preview = new Robot(w, a, m);
-        return new Purchase(preview, total);
-    }
-
-    private VBox card(String title, javafx.scene.Node content) {
-        Label t = new Label(title);
-        t.setStyle("-fx-font-weight: bold;");
-        VBox box = new VBox(8, t, content);
-        box.setPadding(new Insets(12));
-        box.setStyle("-fx-background-color: #222; -fx-text-fill: white; -fx-background-radius: 12;");
-        if (content instanceof Labeled l) l.setStyle("-fx-text-fill: #ddd;");
-        return box;
-    }
-
-    private Label title(String t) {
+    // ===== Helpers visuais e de item =====
+    private Label header(String t) {
         Label l = new Label(t);
-        l.setFont(Font.font(18));
+        l.setStyle("-fx-font-weight: bold; -fx-text-fill: #EDE9FE; -fx-font-size: 14px;");
+        l.setPadding(new Insets(0,0,4,6));
+        l.setBackground(new Background(new BackgroundFill(Color.rgb(0,0,0,0.35), new CornerRadii(8), Insets.EMPTY)));
         return l;
     }
 
-    private void alert(String msg) {
-        new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK).showAndWait();
+    private VBox translucentCard(String title, Node content) {
+        Label t = new Label(title);
+        t.setStyle("-fx-font-weight: bold; -fx-text-fill: #EDE9FE;");
+        VBox box = new VBox(8, t, content);
+        box.setPadding(new Insets(12));
+        box.setStyle("-fx-background-color: rgba(0,0,0,0.35); -fx-background-radius: 12; -fx-text-fill: #EDE9FE;");
+        return box;
+    }
+
+    private ImageView bigPreview() {
+        ImageView iv = new ImageView();
+        iv.setFitWidth(96);
+        iv.setFitHeight(96);
+        iv.setPreserveRatio(true);
+        return iv;
+    }
+
+    private void bindPreview(IntegerProperty lvlProp, ImageView target, String fmt) {
+        lvlProp.addListener((o, oldV, newV) -> {
+            int lvl = newV == null ? 0 : newV.intValue();
+            target.setImage(lvl <= 0 ? null : load(fmt.formatted(lvl)));
+        });
+    }
+
+    private Image load(String path) {
+        InputStream is = getClass().getResourceAsStream(path);
+        if (is == null) throw new IllegalArgumentException("Recurso não encontrado: " + path +
+                " (confira src/main/resources e o nome do arquivo).");
+        return new Image(is, 0, 0, false, false);
+    }
+
+    // strip de itens com badge de preço
+    private static class StripControl { final VBox node; final Runnable refresh; StripControl(VBox n, Runnable r){node=n; refresh=r;} }
+    private static class TileRef {
+        final ToggleButton btn; final Label priceTag; final int level; final int price;
+        TileRef(ToggleButton btn, Label priceTag, int level, int price){ this.btn=btn; this.priceTag=priceTag; this.level=level; this.price=price; }
+        void applySelectedStyle(int selected){
+            String bg = (level==selected) ? "#2A2144" : "#1E1E1E";
+            String bd = (level==selected) ? "#BB86FC" : "#4A4A4A";
+            btn.setStyle("""
+                -fx-background-color: %s;
+                -fx-background-radius: 12;
+                -fx-border-color: %s;
+                -fx-border-width: 2;
+                -fx-border-radius: 12;
+            """.formatted(bg, bd));
+        }
+        void updateAffordability(int available){
+            boolean ok = price <= available;
+            priceTag.setTextFill(ok ? Color.web("#A7F3D0") : Color.web("#FCA5A5"));
+            priceTag.setStyle("-fx-font-size: 11px; -fx-background-color: rgba(20,20,20,0.75); -fx-background-radius: 8; -fx-padding: 2 6 2 6;" +
+                    (ok ? "" : " -fx-background-color: rgba(255,80,80,0.15);"));
+        }
+    }
+
+    private StripControl itemStrip(
+            String title, String fmtPath, String noneLabel, IntegerProperty bindTo,
+            IntSupplier availableCreditsSupplier, IntUnaryOperator costFunc) {
+
+        HBox row = new HBox(8);
+        row.setAlignment(Pos.CENTER_LEFT);
+
+        ToggleGroup group = new ToggleGroup();
+        List<TileRef> tiles = new ArrayList<>();
+
+        tiles.add(addTile(row, null, noneLabel, 0, group, costFunc.applyAsInt(0)));
+        for (int lvl = 1; lvl <= 5; lvl++) {
+            tiles.add(addTile(row, load(fmtPath.formatted(lvl)), "Nível " + lvl, lvl, group, costFunc.applyAsInt(lvl)));
+        }
+
+        group.selectedToggleProperty().addListener((obs, old, sel) -> {
+            int lvl = (sel == null) ? 0 : (int) sel.getUserData();
+            bindTo.set(lvl);
+            tiles.forEach(tl -> tl.applySelectedStyle(lvl));
+        });
+
+        Runnable refreshAfford = () -> {
+            int available = availableCreditsSupplier.getAsInt();
+            tiles.forEach(tl -> tl.updateAffordability(available));
+        };
+
+        tiles.get(0).btn.setSelected(true);
+        bindTo.set(0);
+        refreshAfford.run();
+
+        VBox node = new VBox(6, row);
+        node.setPadding(new Insets(8));
+        node.setStyle("-fx-background-color: rgba(0,0,0,0.35); -fx-background-radius: 12;");
+        return new StripControl(node, refreshAfford);
+    }
+
+    private TileRef addTile(HBox row, Image img, String tooltip, int level, ToggleGroup group, int price) {
+        ImageView iv = new ImageView();
+        iv.setPreserveRatio(true);
+        iv.setFitWidth(64);
+        iv.setFitHeight(64);
+        if (img != null) iv.setImage(img);
+
+        Label priceTag = new Label(price == 0 ? "Grátis" : (price + " cr"));
+        priceTag.setTextFill(Color.web("#A7F3D0"));
+
+        StackPane box = new StackPane(iv);
+        StackPane.setAlignment(priceTag, Pos.BOTTOM_RIGHT);
+        StackPane.setMargin(priceTag, new Insets(0,4,4,0));
+        box.getChildren().add(priceTag);
+        box.setPrefSize(76, 76);
+
+        ToggleButton b = new ToggleButton();
+        b.setGraphic(box);
+        b.setPrefSize(84, 84);
+        b.setFocusTraversable(false);
+        Tooltip.install(b, new Tooltip(tooltip));
+        b.setUserData(level);
+        b.setToggleGroup(group);
+
+        TileRef ref = new TileRef(b, priceTag, level, price);
+        ref.applySelectedStyle(-1);
+
+        row.getChildren().add(b);
+        return ref;
     }
 
     // ==========================
-    // 3) TELA DA BATALHA (PIXEL ART)
+    // 3) Batalha
     // ==========================
     private void showBattleScreen() {
-        // Robôs já equipados na loja; só inicializa o motor
         engine = new UiBattleEngine(p1, p2);
-
-        // >>> NOVO: cena de batalha em Pixel Art
         PixelBattleView pixelView = new PixelBattleView(engine);
         Scene battleScene = pixelView.buildScene();
-
-        // Alternativa de “reinício”: você pode voltar à tela de nomes a partir de um botão
-        // dentro do PixelBattleView, ou adicionar um MenuBar aqui se quiser.
-
         stage.setScene(battleScene);
-    }   
+    }
+
+    private Purchase buildPurchase(int credits, int wLvl, int aLvl,
+                                   IntUnaryOperator weaponCost, IntUnaryOperator armorCost) {
+        int total = weaponCost.applyAsInt(wLvl) + armorCost.applyAsInt(aLvl);
+        if (total > credits) return null;
+        Weapon w = (wLvl <= 0) ? null : new Weapon("Arma N" + wLvl, wLvl);
+        Armor  a = (aLvl <= 0) ? null : new Armor("Armadura N" + aLvl, aLvl);
+        Robot preview = new Robot(w, a, null); // sem módulo por enquanto
+        return new Purchase(preview, total);
+    }
+
+    private void alert(String msg) { new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK).showAndWait(); }
 
     public static void main(String[] args) { launch(args); }
 }
