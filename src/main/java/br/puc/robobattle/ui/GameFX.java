@@ -28,14 +28,12 @@ import java.util.function.IntUnaryOperator;
 
 public class GameFX extends Application {
 
-    // ===== Config de layout da tela de nomes (igual à versão que rodava) =====
+    // ===== Login (mesma base que já rodava) =====
     private static final double DESIGN_W = 1344.0;
     private static final double DESIGN_H = 768.0;
-
     private static final double SLOT1_X = 490, SLOT1_Y = 402, SLOT1_W = 305, SLOT1_H = 52;
     private static final double SLOT2_X = 490, SLOT2_Y = 472, SLOT2_W = 305, SLOT2_H = 52;
     private static final double ENTER_X = 531, ENTER_Y = 550, ENTER_W = 230, ENTER_H = 54;
-
     private static final int FIELD_FONT_SIZE = 22;
 
     // ===== Recursos =====
@@ -52,7 +50,6 @@ public class GameFX extends Application {
     private Purchase pur1, pur2;
     private UiBattleEngine engine;
 
-    // Carrinho da compra daquele jogador
     public static class Purchase {
         public final Robot robot;
         public final int totalCost;
@@ -67,9 +64,9 @@ public class GameFX extends Application {
         stage.show();
     }
 
-    // ==========================
-    // 1) Tela de nomes (mesma base)
-    // ==========================
+    // =========================================================
+    // 1) TELA DE NOMES (igual à que estava funcionando)
+    // =========================================================
     private void showNameScreen() {
         Image bg = load(INTRO_BG);
         final double IMG_W = bg.getWidth();
@@ -89,7 +86,7 @@ public class GameFX extends Application {
         placePx(tf2, SLOT2_X, SLOT2_Y, SLOT2_W, SLOT2_H, IMG_W, IMG_H);
 
         Button enterBtn = new Button();
-        enterBtn.setOpacity(0.0); // invisível sobre a arte
+        enterBtn.setOpacity(0.0);
         enterBtn.setBackground(Background.EMPTY);
         enterBtn.setBorder(Border.EMPTY);
         placePx(enterBtn, ENTER_X, ENTER_Y, ENTER_W, ENTER_H, IMG_W, IMG_H);
@@ -148,14 +145,6 @@ public class GameFX extends Application {
         return tf;
     }
 
-    private Label bold(String text) {
-        Label l = new Label(text);
-        l.setStyle("-fx-font-weight: bold;");
-        return l;
-    }
-
-
-
     private static void placePx(Region node, double x, double y, double w, double h, double imgW, double imgH) {
         double sx = imgW / DESIGN_W;
         double sy = imgH / DESIGN_H;
@@ -164,9 +153,9 @@ public class GameFX extends Application {
         node.setPrefSize(w * sx, h * sy);
     }
 
-    // ==========================
-    // 2) Loja (com background novo e sem tabelas)
-    // ==========================
+    // =========================================================
+    // 2) LOJA (ancrada no fundo + responsiva + UI polida)
+    // =========================================================
     private void showShopScreen(Player player, boolean isFirstPlayer) {
         final int credits = player.credits();
 
@@ -178,18 +167,20 @@ public class GameFX extends Application {
         IntUnaryOperator weaponCost = lvl -> (lvl <= 0) ? 0 : new Weapon("N"+lvl, lvl).getCost();
         IntUnaryOperator armorCost  = lvl -> (lvl <= 0) ? 0 : new Armor("N"+lvl, lvl).getCost();
 
-        // ===== fundo =====
-        ImageView bg = new ImageView(load(SHOP_BG));
-        bg.setPreserveRatio(true);
-        bg.setSmooth(true);
-        bg.setCache(true);
+        // ====== fundo ======
+        Image bgImg = load(SHOP_BG);
+        final double IMG_W = bgImg.getWidth();
+        final double IMG_H = bgImg.getHeight();
 
-        // ===== overlays =====
-        BorderPane overlay = new BorderPane();
-        overlay.setPickOnBounds(false);
-        overlay.setPadding(new Insets(16));
+        Pane board = new Pane();
+        board.setPrefSize(IMG_W, IMG_H);
+        board.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setBackground(new Background(new BackgroundImage(
+                bgImg, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER, new BackgroundSize(IMG_W, IMG_H, false, false, false, false))));
 
-        // tiras de seleção (com badge de preço apenas)
+        // ====== strips (com preço no tile) ======
         StripControl swords = itemStrip(
                 "ESPADAS", SWORD_FMT, "Sem arma", weaponLvl,
                 () -> credits - armorCost.applyAsInt(armorLvl.get()),
@@ -200,12 +191,11 @@ public class GameFX extends Application {
                 () -> credits - weaponCost.applyAsInt(weaponLvl.get()),
                 armorCost
         );
-
-        // quando um lado muda, o outro recalcula a acessibilidade (cores dos badges)
+        // cross-refresh (quando um muda, recalcula acessibilidade do outro)
         weaponLvl.addListener((o,a,b) -> shields.refresh.run());
         armorLvl.addListener((o,a,b) -> swords.refresh.run());
 
-        // prévias grandes
+        // ====== prévias ======
         ImageView swordPreview  = bigPreview();
         ImageView shieldPreview = bigPreview();
         bindPreview(weaponLvl, swordPreview, SWORD_FMT);
@@ -217,7 +207,7 @@ public class GameFX extends Application {
         );
         previews.setAlignment(Pos.CENTER);
 
-        // barra inferior
+        // ====== barra inferior ======
         Label lblCred = bold("Créditos: " + credits);
         Label lblSubtotal = new Label("Subtotal: 0");
         Label lblSaldo = new Label("Saldo pós-compra: " + credits);
@@ -225,42 +215,29 @@ public class GameFX extends Application {
         lblSubtotal.setTextFill(Color.web("#EDE9FE"));
         lblSaldo.setTextFill(Color.web("#EDE9FE"));
 
-        Button btnPreview = new Button("Pré-visualizar");
-        Button btnConfirm = new Button("Confirmar compra");
+        Button btnPreview = primaryButton("Pré-visualizar");
+        Button btnConfirm = primaryButton("Confirmar compra");
 
         HBox bottom = new HBox(16, btnPreview, new Region(), lblCred, lblSubtotal, lblSaldo, btnConfirm);
         HBox.setHgrow(bottom.getChildren().get(1), Priority.ALWAYS);
         bottom.setAlignment(Pos.CENTER_LEFT);
-        bottom.setPadding(new Insets(8));
-        bottom.setStyle("-fx-background-color: rgba(0,0,0,0.35); -fx-background-radius: 10;");
+        bottom.setPadding(new Insets(10));
+        bottom.setStyle("-fx-background-color: rgba(0,0,0,0.38); -fx-background-radius: 14;");
 
-        VBox center = new VBox(24, previews, bottom);
-        center.setAlignment(Pos.BOTTOM_CENTER);
-        center.setPadding(new Insets(0, 32, 24, 32));
+        VBox centerBox = new VBox(20, previews, bottom);
+        centerBox.setAlignment(Pos.CENTER);
 
-        VBox left  = new VBox(8, header("ESPADAS"), swords.node);
-        VBox right = new VBox(8, header("ESCUDOS"), shields.node);
-        left.setAlignment(Pos.TOP_LEFT);
-        right.setAlignment(Pos.TOP_RIGHT);
+        // ====== adicionar no "board" e posicionar por porcentagem do fundo ======
+        // regiões pensadas para casar com os nichos da sua arte:
+        // esquerda:  x=6.5%  y=18%  w=30%  h=56%
+        // direita:   x=63.5% y=18%  w=30%  h=56%
+        // centro-inf: x=25%  y=76%  w=50%  h=18%
+        board.getChildren().addAll(swords.node, shields.node, centerBox);
+        placePct(swords.node,  0.065, 0.18, 0.30, 0.56, IMG_W, IMG_H);
+        placePct(shields.node, 0.635, 0.18, 0.30, 0.56, IMG_W, IMG_H);
+        placePct(centerBox,    0.250, 0.76, 0.50, 0.18, IMG_W, IMG_H);
 
-        overlay.setLeft(left);
-        overlay.setRight(right);
-        overlay.setCenter(center);
-        BorderPane.setMargin(left, new Insets(40, 0, 0, 40));
-        BorderPane.setMargin(right, new Insets(40, 40, 0, 0));
-
-        // root com background
-        StackPane root = new StackPane(bg, overlay);
-        Scene scene = new Scene(root, 1160, 700);
-        bg.setPreserveRatio(true);
-        bg.setSmooth(true);
-
-        scene.widthProperty().addListener((o,ov,nv) -> cover(bg, scene));
-        scene.heightProperty().addListener((o,ov,nv) -> cover(bg, scene));
-        cover(bg, scene);
-
-
-        // resumo
+        // ====== lógica do resumo ======
         Runnable refreshSummary = () -> {
             int sub = weaponCost.applyAsInt(weaponLvl.get()) + armorCost.applyAsInt(armorLvl.get());
             lblSubtotal.setText("Subtotal: " + sub);
@@ -286,20 +263,85 @@ public class GameFX extends Application {
             Purchase p = buildPurchase(credits, weaponLvl.get(), armorLvl.get(), weaponCost, armorCost);
             if (p == null) { alert("Créditos insuficientes para esta configuração."); return; }
             if (!player.buyAndEquip(p.robot, p.totalCost)) { alert("Falha ao equipar. Tente novamente."); return; }
-            if (isFirstPlayer) { pur1 = p; showShopScreen(p2, false); }
-            else { pur2 = p; showBattleScreen(); }
+            if (isFirstPlayer) { pur1 = p; showShopScreen(p2, false); } else { pur2 = p; showBattleScreen(); }
         });
+
+        // ====== cena com escalonamento automático do tabuleiro ======
+        StackPane root = new StackPane(board);
+        root.setStyle("-fx-background-color: black;");
+        Scene scene = new Scene(root, 1160, 700);
+
+        Runnable rescale = () -> {
+            double s = Math.min(scene.getWidth() / IMG_W, scene.getHeight() / IMG_H);
+            board.setScaleX(s);
+            board.setScaleY(s);
+        };
+        scene.widthProperty().addListener((o,a,b) -> rescale.run());
+        scene.heightProperty().addListener((o,a,b) -> rescale.run());
+        rescale.run();
 
         stage.setScene(scene);
     }
 
-    // ===== Helpers visuais e de item =====
-    private Label header(String t) {
-        Label l = new Label(t);
-        l.setStyle("-fx-font-weight: bold; -fx-text-fill: #EDE9FE; -fx-font-size: 14px;");
-        l.setPadding(new Insets(0,0,4,6));
-        l.setBackground(new Background(new BackgroundFill(Color.rgb(0,0,0,0.35), new CornerRadii(8), Insets.EMPTY)));
+    // ---- helpers de posicionamento por porcentagem do fundo ----
+    private static void placePct(Region node, double px, double py, double pw, double ph,
+                                 double imgW, double imgH) {
+        node.setLayoutX(px * imgW);
+        node.setLayoutY(py * imgH);
+        node.setPrefSize(pw * imgW, ph * imgH);
+        node.setMaxSize(pw * imgW, ph * imgH);
+        node.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+    }
+
+    // =========================================================
+    // 3) BATALHA
+    // =========================================================
+    private void showBattleScreen() {
+        engine = new UiBattleEngine(p1, p2);
+        PixelBattleView pixelView = new PixelBattleView(engine);
+        Scene battleScene = pixelView.buildScene();
+        stage.setScene(battleScene);
+    }
+
+    // =========================================================
+    // Helpers visuais / itens
+    // =========================================================
+    private Label bold(String text) {
+        Label l = new Label(text);
+        l.setStyle("-fx-font-weight: bold;");
         return l;
+    }
+
+    private Button primaryButton(String text) {
+        Button b = new Button(text);
+        b.setStyle("""
+            -fx-font-weight: bold;
+            -fx-text-fill: white;
+            -fx-background-color: linear-gradient(#6D28D9, #4C1D95);
+            -fx-background-radius: 12;
+            -fx-padding: 8 14 8 14;
+            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 10, 0.3, 0, 2);
+            -fx-cursor: hand;
+        """);
+        b.setOnMouseEntered(ev -> b.setStyle("""
+            -fx-font-weight: bold;
+            -fx-text-fill: white;
+            -fx-background-color: linear-gradient(#7C3AED, #5B21B6);
+            -fx-background-radius: 12;
+            -fx-padding: 8 14 8 14;
+            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 12, 0.35, 0, 3);
+            -fx-cursor: hand;
+        """));
+        b.setOnMouseExited(ev -> b.setStyle("""
+            -fx-font-weight: bold;
+            -fx-text-fill: white;
+            -fx-background-color: linear-gradient(#6D28D9, #4C1D95);
+            -fx-background-radius: 12;
+            -fx-padding: 8 14 8 14;
+            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 10, 0.3, 0, 2);
+            -fx-cursor: hand;
+        """));
+        return b;
     }
 
     private VBox translucentCard(String title, Node content) {
@@ -307,7 +349,11 @@ public class GameFX extends Application {
         t.setStyle("-fx-font-weight: bold; -fx-text-fill: #EDE9FE;");
         VBox box = new VBox(8, t, content);
         box.setPadding(new Insets(12));
-        box.setStyle("-fx-background-color: rgba(0,0,0,0.35); -fx-background-radius: 12; -fx-text-fill: #EDE9FE;");
+        box.setStyle("""
+            -fx-background-color: rgba(0,0,0,0.38);
+            -fx-background-radius: 14;
+            -fx-text-fill: #EDE9FE;
+        """);
         return box;
     }
 
@@ -333,27 +379,32 @@ public class GameFX extends Application {
         return new Image(is, 0, 0, false, false);
     }
 
-    // strip de itens com badge de preço
+    // ---- strip de itens com badge de preço e seleção estilizada ----
     private static class StripControl { final VBox node; final Runnable refresh; StripControl(VBox n, Runnable r){node=n; refresh=r;} }
     private static class TileRef {
         final ToggleButton btn; final Label priceTag; final int level; final int price;
         TileRef(ToggleButton btn, Label priceTag, int level, int price){ this.btn=btn; this.priceTag=priceTag; this.level=level; this.price=price; }
         void applySelectedStyle(int selected){
-            String bg = (level==selected) ? "#2A2144" : "#1E1E1E";
-            String bd = (level==selected) ? "#BB86FC" : "#4A4A4A";
+            String bg = (level==selected) ? "rgba(88,28,135,0.55)" : "rgba(20,20,28,0.55)";
+            String bd = (level==selected) ? "#A78BFA" : "#4B5563";
             btn.setStyle("""
                 -fx-background-color: %s;
-                -fx-background-radius: 12;
+                -fx-background-radius: 14;
                 -fx-border-color: %s;
                 -fx-border-width: 2;
-                -fx-border-radius: 12;
+                -fx-border-radius: 14;
+                -fx-cursor: hand;
             """.formatted(bg, bd));
         }
         void updateAffordability(int available){
             boolean ok = price <= available;
             priceTag.setTextFill(ok ? Color.web("#A7F3D0") : Color.web("#FCA5A5"));
-            priceTag.setStyle("-fx-font-size: 11px; -fx-background-color: rgba(20,20,20,0.75); -fx-background-radius: 8; -fx-padding: 2 6 2 6;" +
-                    (ok ? "" : " -fx-background-color: rgba(255,80,80,0.15);"));
+            priceTag.setStyle("""
+                -fx-font-size: 11px;
+                -fx-background-color: rgba(0,0,0,0.55);
+                -fx-background-radius: 9;
+                -fx-padding: 2 6 2 6;
+            """);
         }
     }
 
@@ -361,8 +412,15 @@ public class GameFX extends Application {
             String title, String fmtPath, String noneLabel, IntegerProperty bindTo,
             IntSupplier availableCreditsSupplier, IntUnaryOperator costFunc) {
 
-        HBox row = new HBox(8);
-        row.setAlignment(Pos.CENTER_LEFT);
+        VBox titleBox = new VBox();
+        Label t = new Label(title);
+        t.setStyle("-fx-text-fill: #EDE9FE; -fx-font-weight: bold; -fx-font-size: 14px;");
+        titleBox.getChildren().add(t);
+
+        FlowPane row = new FlowPane();
+        row.setHgap(10);
+        row.setVgap(10);
+        row.setAlignment(Pos.TOP_LEFT);
 
         ToggleGroup group = new ToggleGroup();
         List<TileRef> tiles = new ArrayList<>();
@@ -387,17 +445,17 @@ public class GameFX extends Application {
         bindTo.set(0);
         refreshAfford.run();
 
-        VBox node = new VBox(6, row);
-        node.setPadding(new Insets(8));
-        node.setStyle("-fx-background-color: rgba(0,0,0,0.35); -fx-background-radius: 12;");
+        VBox node = new VBox(8, titleBox, row);
+        node.setPadding(new Insets(12));
+        node.setStyle("-fx-background-color: rgba(0,0,0,0.38); -fx-background-radius: 14;");
         return new StripControl(node, refreshAfford);
     }
 
-    private TileRef addTile(HBox row, Image img, String tooltip, int level, ToggleGroup group, int price) {
+    private TileRef addTile(FlowPane row, Image img, String tooltip, int level, ToggleGroup group, int price) {
         ImageView iv = new ImageView();
         iv.setPreserveRatio(true);
-        iv.setFitWidth(64);
-        iv.setFitHeight(64);
+        iv.setFitWidth(72);
+        iv.setFitHeight(72);
         if (img != null) iv.setImage(img);
 
         Label priceTag = new Label(price == 0 ? "Grátis" : (price + " cr"));
@@ -405,13 +463,13 @@ public class GameFX extends Application {
 
         StackPane box = new StackPane(iv);
         StackPane.setAlignment(priceTag, Pos.BOTTOM_RIGHT);
-        StackPane.setMargin(priceTag, new Insets(0,4,4,0));
+        StackPane.setMargin(priceTag, new Insets(0,6,6,0));
         box.getChildren().add(priceTag);
-        box.setPrefSize(76, 76);
+        box.setPrefSize(84, 84);
 
         ToggleButton b = new ToggleButton();
         b.setGraphic(box);
-        b.setPrefSize(84, 84);
+        b.setPrefSize(96, 96);
         b.setFocusTraversable(false);
         Tooltip.install(b, new Tooltip(tooltip));
         b.setUserData(level);
@@ -424,50 +482,17 @@ public class GameFX extends Application {
         return ref;
     }
 
-    // ==========================
-    // 3) Batalha
-    // ==========================
-    private void showBattleScreen() {
-        engine = new UiBattleEngine(p1, p2);
-        PixelBattleView pixelView = new PixelBattleView(engine);
-        Scene battleScene = pixelView.buildScene();
-        stage.setScene(battleScene);
-    }
-
     private Purchase buildPurchase(int credits, int wLvl, int aLvl,
                                    IntUnaryOperator weaponCost, IntUnaryOperator armorCost) {
         int total = weaponCost.applyAsInt(wLvl) + armorCost.applyAsInt(aLvl);
         if (total > credits) return null;
         Weapon w = (wLvl <= 0) ? null : new Weapon("Arma N" + wLvl, wLvl);
         Armor  a = (aLvl <= 0) ? null : new Armor("Armadura N" + aLvl, aLvl);
-        Robot preview = new Robot(w, a, null); // sem módulo por enquanto
+        Robot preview = new Robot(w, a, null); // sem módulo
         return new Purchase(preview, total);
     }
 
     private void alert(String msg) { new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK).showAndWait(); }
 
     public static void main(String[] args) { launch(args); }
-
-    private void cover(ImageView bg, Scene scene) {
-        var img = bg.getImage();
-        if (img == null) return;
-
-        double iw = img.getWidth();
-        double ih = img.getHeight();
-        double vw = scene.getWidth();
-        double vh = scene.getHeight();
-
-        double scale = Math.max(vw / iw, vh / ih); // cobre a tela
-
-        double w = iw * scale;
-        double h = ih * scale;
-
-        bg.setFitWidth(w);
-        bg.setFitHeight(h);
-
-        // centraliza
-        bg.setTranslateX((vw - w) / 2);
-        bg.setTranslateY((vh - h) / 2);
-    }
-
 }
