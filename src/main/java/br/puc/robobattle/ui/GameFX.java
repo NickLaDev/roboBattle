@@ -252,8 +252,13 @@ public class GameFX extends Application {
         // root com background
         StackPane root = new StackPane(bg, overlay);
         Scene scene = new Scene(root, 1160, 700);
-        bg.fitWidthProperty().bind(scene.widthProperty());
-        bg.fitHeightProperty().bind(scene.heightProperty());
+        bg.setPreserveRatio(true);
+        bg.setSmooth(true);
+
+        scene.widthProperty().addListener((o,ov,nv) -> cover(bg, scene));
+        scene.heightProperty().addListener((o,ov,nv) -> cover(bg, scene));
+        cover(bg, scene);
+
 
         // resumo
         Runnable refreshSummary = () -> {
@@ -442,4 +447,27 @@ public class GameFX extends Application {
     private void alert(String msg) { new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK).showAndWait(); }
 
     public static void main(String[] args) { launch(args); }
+
+    private void cover(ImageView bg, Scene scene) {
+        var img = bg.getImage();
+        if (img == null) return;
+
+        double iw = img.getWidth();
+        double ih = img.getHeight();
+        double vw = scene.getWidth();
+        double vh = scene.getHeight();
+
+        double scale = Math.max(vw / iw, vh / ih); // cobre a tela
+
+        double w = iw * scale;
+        double h = ih * scale;
+
+        bg.setFitWidth(w);
+        bg.setFitHeight(h);
+
+        // centraliza
+        bg.setTranslateX((vw - w) / 2);
+        bg.setTranslateY((vh - h) / 2);
+    }
+
 }

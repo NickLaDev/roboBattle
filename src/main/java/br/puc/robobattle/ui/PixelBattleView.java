@@ -117,7 +117,18 @@ public class PixelBattleView {
 
     private final Random rng = new Random();
 
-    public PixelBattleView(UiBattleEngine engine) { this.engine = engine; }
+    private final String leftName;
+    private final String rightName;
+
+    public PixelBattleView(UiBattleEngine engine) {
+        this.engine = engine;
+        // captura logo o primeiro snapshot pra descobrir quem é quem
+        var snap = engine.snapshot();
+        // o primeiro snapshot SEMPRE tem "current" e "enemy"
+        this.leftName = snap.currentName;   // vamos desenhar esse SEMPRE à esquerda
+        this.rightName = snap.enemyName;    // e esse SEMPRE à direita
+    }
+
 
     public Scene buildScene() {
         canvas = new Canvas(BASE_W, BASE_H);
@@ -259,7 +270,7 @@ public class PixelBattleView {
                 lblTurn.setText("Vez de: " + s.currentName + "  —  Round " + s.round);
 
                 // Accent do banner e do pedestal conforme lado (só quando muda)
-                String accent = s.currentName.equals("Jogador 1") ? "#60a5fa" : "#fb7185"; // azul x rosa
+                String accent = s.currentName.equals(leftName) ? "#60a5fa" : "#fb7185"; // azul x rosa
                 if (!accent.equals(lastAccent)) {
                     lastAccent = accent;
                     bannerGlow.setColor(Color.web(accent));
@@ -571,16 +582,36 @@ public class PixelBattleView {
         gc.fillRect(24, 24, barW+4, barH+4);
         gc.fillRect(BASE_W - barW - 28, 24, barW+4, barH+4);
 
-        // preenchimentos (heurística por nomes padrão)
-        int p1hp = s.currentName.equals("Jogador 1") ? s.currentHp : s.enemyHp;
-        int p1max= s.currentName.equals("Jogador 1") ? s.currentMaxHp : s.enemyMaxHp;
-        int p2hp = s.currentName.equals("Jogador 2") ? s.currentHp : s.enemyHp;
-        int p2max= s.currentName.equals("Jogador 2") ? s.currentMaxHp : s.enemyMaxHp;
+// preenchimentos com base em quem está à esquerda/direita
 
-        double r1 = Math.max(0, (double)p1hp / Math.max(1, p1max));
-        double r2 = Math.max(0, (double)p2hp / Math.max(1, p2max));
+// ESQUERDA (leftName)
+        int leftHp, leftMax;
+        if (s.currentName.equals(leftName)) {
+            leftHp  = s.currentHp;
+            leftMax = s.currentMaxHp;
+        } else {
+            leftHp  = s.enemyHp;
+            leftMax = s.enemyMaxHp;
+        }
+
+// DIREITA (rightName)
+        int rightHp, rightMax;
+        if (s.currentName.equals(rightName)) {
+            rightHp  = s.currentHp;
+            rightMax = s.currentMaxHp;
+        } else {
+            rightHp  = s.enemyHp;
+            rightMax = s.enemyMaxHp;
+        }
+
+// cálculo proporcional
+        double r1 = Math.max(0, (double) leftHp / Math.max(1, leftMax));
+        double r2 = Math.max(0, (double) rightHp / Math.max(1, rightMax));
+
+// desenha barras
         gc.setFill(Color.web("#2aff2a"));
         gc.fillRect(26, 26, (int)(barW * r1), barH);
+
         gc.setFill(Color.web("#ff3b3b"));
         gc.fillRect(BASE_W - barW - 26, 26, (int)(barW * r2), barH);
     }
@@ -598,7 +629,7 @@ public class PixelBattleView {
         phase = Phase.APPROACH;
         pendingAction = a;
         beforeSnap = before;
-        attackerIsP1 = "Jogador 1".equals(before.currentName);
+        attackerIsP1 = before.currentName.equals(leftName);
 
         approachTarget = Math.max(0, 2.0 * GAP - HIT_OVERLAP);
 
