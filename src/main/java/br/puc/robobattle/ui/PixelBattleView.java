@@ -14,19 +14,16 @@ import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
+import javafx.scene.paint.*; // LinearGradient, RadialGradient, CycleMethod, Stop, Color
+import javafx.scene.text.Font;
+import javafx.scene.text.Text;
 
+import java.io.InputStream;
 import java.util.Random;
 
 /**
  * View de batalha com spritesheets (idle/attack/run/defend/hurt/death).
- * O atacante corre até o oponente, golpeia e retorna.
- * Prioridade: DEATH > HURT > DEFEND > RUN > ATTACK > IDLE
- *
- * Nesta versão:
- * - BG usa terrace.png
- * - Banner central superior “rpg/castelo” mostrando de quem é a vez
- * - Botões dentro da arena, em um painel de pedra translúcido
- * - Atalhos 1/2/3
+ * Mostra imagem de vitória com transição suave (fade + pop) quando a luta termina.
  */
 public class PixelBattleView {
 
@@ -99,7 +96,7 @@ public class PixelBattleView {
     // Cinemática de aproximação
     private enum Phase { NONE, APPROACH, IMPACT, RETURN }
     private Phase phase = Phase.NONE;
-    private boolean attackerIsP1 = true;          // baseado em before.currentName == "Jogador 1"
+    private boolean attackerIsP1 = true;          // baseado em before.currentName == leftName
     private boolean inputLocked = false;
     private Action pendingAction = null;          // ATTACK ou SPECIAL
     private UiBattleEngine.Snapshot beforeSnap;   // snapshot antes do impacto
@@ -117,26 +114,32 @@ public class PixelBattleView {
 
     private final Random rng = new Random();
 
+    // Mapeamento fixo esquerda/direita (usa os nomes inseridos)
     private final String leftName;
     private final String rightName;
 
+    // === Vitória (imagem + transição) ===
+    private Image victoryImg;         // /assets/ui/victory.png
+    private double victoryT = 0.0;    // 0→1 (animação)
+    private boolean victoryBoot = false;
+
     public PixelBattleView(UiBattleEngine engine) {
         this.engine = engine;
-        // captura logo o primeiro snapshot pra descobrir quem é quem
         var snap = engine.snapshot();
-        // o primeiro snapshot SEMPRE tem "current" e "enemy"
-        this.leftName = snap.currentName;   // vamos desenhar esse SEMPRE à esquerda
-        this.rightName = snap.enemyName;    // e esse SEMPRE à direita
+        this.leftName  = snap.currentName;
+        this.rightName = snap.enemyName;
     }
-
 
     public Scene buildScene() {
         canvas = new Canvas(BASE_W, BASE_H);
         gc = canvas.getGraphicsContext2D();
         gc.setImageSmoothing(SMOOTHING);
 
-        // ===== BG: usa o terrace.png que você mandou =====
+        // BG
         arena = new Image(getClass().getResourceAsStream("/assets/bg/terrace.png"), 0, 0, false, false);
+
+        // Carrega a imagem de vitória (coloque em resources/assets/ui/victory.png)
+        victoryImg = safeLoad("/assets/ui/victory.png");
 
         // ===== Sprites =====
         r1Idle = new SpriteSheet("/assets/robots/r1_idle.png", 6, 1);
@@ -191,13 +194,13 @@ public class PixelBattleView {
         durDeath1 = r1Death.columns() / deathFps1;
         durDeath2 = r2Death.columns() / deathFps2;
 
-        // ===== Overlay dentro da arena =====
+        // ===== Overlay =====
         StackPane root = new StackPane(canvas);
 
-        // Banner central superior (tema castelo)
+        // Banner central superior
         lblTurn = new Label();
         lblTurn.setAlignment(Pos.CENTER);
-        lblTurn.setTextFill(Color.web("#ffe9b6")); // dourado claro
+        lblTurn.setTextFill(Color.web("#ffe9b6"));
         lblTurn.setStyle("""
             -fx-font-family: "Georgia", "Times New Roman", serif;
             -fx-font-size: 22px;
@@ -206,7 +209,7 @@ public class PixelBattleView {
             -fx-background-color: linear-gradient(rgba(35,22,45,0.84), rgba(25,16,32,0.84));
             -fx-background-radius: 18;
             -fx-border-radius: 18;
-            -fx-border-color: rgba(252, 211, 77, 0.85); /* dourado */
+            -fx-border-color: rgba(252, 211, 77, 0.85);
             -fx-border-width: 2;
         """);
         DropShadow bannerGlow = new DropShadow(26, Color.web("#f59e0b"));
@@ -218,7 +221,7 @@ public class PixelBattleView {
         bannerBox.setPadding(new Insets(14, 0, 0, 0));
         bannerBox.setMouseTransparent(true);
 
-        // Botões em “pedra” translúcida
+        // Botões
         btnAtk = makeStoneButton("⚔ ATTACK");
         btnDef = makeStoneButton("🛡 DEFEND");
         btnSpc = makeStoneButton("⚡ SPECIAL");
@@ -227,11 +230,11 @@ public class PixelBattleView {
         btnDef.setOnAction(e -> perform(Action.DEFEND));
         btnSpc.setOnAction(e -> perform(Action.SPECIAL));
 
-        buttons = new HBox(16, btnAtk, btnDef, btnSpc);
+        HBox buttons = new HBox(16, btnAtk, btnDef, btnSpc);
         buttons.setAlignment(Pos.CENTER);
         buttons.setPadding(new Insets(10));
         buttons.setMaxWidth(560);
-        buttons.setStyle(pedestalStyle("#9a7bd1")); // borda violeta que combina com o BG
+        buttons.setStyle(pedestalStyle("#9a7bd1"));
 
         VBox bottomBox = new VBox(buttons);
         bottomBox.setAlignment(Pos.BOTTOM_CENTER);
@@ -265,12 +268,9 @@ public class PixelBattleView {
                 render();
 
                 var s = engine.snapshot();
-
-                // Texto centralizado “de quem é a vez”
                 lblTurn.setText("Vez de: " + s.currentName + "  —  Round " + s.round);
 
-                // Accent do banner e do pedestal conforme lado (só quando muda)
-                String accent = s.currentName.equals(leftName) ? "#60a5fa" : "#fb7185"; // azul x rosa
+                String accent = s.currentName.equals(leftName) ? "#60a5fa" : "#fb7185";
                 if (!accent.equals(lastAccent)) {
                     lastAccent = accent;
                     bannerGlow.setColor(Color.web(accent));
@@ -304,7 +304,6 @@ public class PixelBattleView {
     }
 
     private String pedestalStyle(String accentHex) {
-        // painel de pedra translúcido
         String border = Color.web(accentHex, 0.75).toString().replace("0x", "#");
         return """
             -fx-background-color:
@@ -340,15 +339,14 @@ public class PixelBattleView {
         return b;
     }
 
-    // =================== GAME LOGIC (inalterada) ===================
+    // =================== GAME LOOP ===================
     private void update(double dt) {
         var snap = engine.snapshot();
 
-        // Fim de luta: só death
         if (snap.finished) {
-            startDeathIfNeeded(snap);
-            if (p1DeadStarted && !p1DeathDone) { anim1Death.update(dt); tDeath1 += dt; if (tDeath1 >= durDeath1) p1DeathDone = true; }
-            if (p2DeadStarted && !p2DeathDone) { anim2Death.update(dt); tDeath2 += dt; if (tDeath2 >= durDeath2) p2DeathDone = true; }
+            // inicializa o fade/pop uma única vez
+            if (!victoryBoot) { victoryBoot = true; victoryT = 0.0; }
+            victoryT = Math.min(1.0, victoryT + dt * 1.6); // velocidade da transição
             return;
         }
 
@@ -471,20 +469,6 @@ public class PixelBattleView {
         r1OffsetX = 0; r2OffsetX = 0;
     }
 
-    /** Quem perdeu? (usa nomes padrão "Jogador 1"/"Jogador 2" usados nesta view) */
-    private void startDeathIfNeeded(UiBattleEngine.Snapshot s) {
-        if (p1DeadStarted || p2DeadStarted) return;
-        boolean enemyLost = s.winner != null && s.winner.equals(s.currentName);
-        String loserName = enemyLost ? s.enemyName : s.currentName;
-        if ("Jogador 1".equals(loserName)) {
-            p1DeadStarted = true; p1DeathDone = false; tDeath1 = 0; anim1Death.reset();
-            p1Attacking = false; p1DefendPlaying = false; p1HurtPlaying = false;
-        } else {
-            p2DeadStarted = true; p2DeathDone = false; tDeath2 = 0; anim2Death.reset();
-            p2Attacking = false; p2DefendPlaying = false; p2HurtPlaying = false;
-        }
-    }
-
     private void render() {
         gc.clearRect(0,0,BASE_W,BASE_H);
         drawBackgroundCover(arena);
@@ -551,11 +535,8 @@ public class PixelBattleView {
         drawHpBarsHD();
 
         if (snap.finished) {
-            gc.setFill(Color.color(0, 0, 0, 0.55));
-            gc.fillRect(0, 0, BASE_W, BASE_H);
-            gc.setFill(Color.WHITE);
-            String msg = "*** VENCEDOR: " + snap.winner + " ***";
-            gc.fillText(msg, BASE_W / 2.0 - 120, 64);
+            String nome = (snap.winner == null || snap.winner.isBlank()) ? "VENCEDOR" : snap.winner;
+            drawVictoryImageOverlay(gc, nome.toUpperCase());
         }
     }
 
@@ -582,9 +563,7 @@ public class PixelBattleView {
         gc.fillRect(24, 24, barW+4, barH+4);
         gc.fillRect(BASE_W - barW - 28, 24, barW+4, barH+4);
 
-// preenchimentos com base em quem está à esquerda/direita
-
-// ESQUERDA (leftName)
+        // ESQUERDA (leftName)
         int leftHp, leftMax;
         if (s.currentName.equals(leftName)) {
             leftHp  = s.currentHp;
@@ -594,7 +573,7 @@ public class PixelBattleView {
             leftMax = s.enemyMaxHp;
         }
 
-// DIREITA (rightName)
+        // DIREITA (rightName)
         int rightHp, rightMax;
         if (s.currentName.equals(rightName)) {
             rightHp  = s.currentHp;
@@ -604,11 +583,9 @@ public class PixelBattleView {
             rightMax = s.enemyMaxHp;
         }
 
-// cálculo proporcional
         double r1 = Math.max(0, (double) leftHp / Math.max(1, leftMax));
         double r2 = Math.max(0, (double) rightHp / Math.max(1, rightMax));
 
-// desenha barras
         gc.setFill(Color.web("#2aff2a"));
         gc.fillRect(26, 26, (int)(barW * r1), barH);
 
@@ -656,4 +633,87 @@ public class PixelBattleView {
     private static double clamp(double v, double lo, double hi) {
         return Math.max(lo, Math.min(hi, v));
     }
+
+    // ================== VITÓRIA: IMAGEM COM TRANSIÇÃO ==================
+    private void drawVictoryImageOverlay(GraphicsContext g, String winnerName) {
+        // fundo escurecido com fade
+        double a = easeInOutQuad(victoryT);
+        g.setGlobalAlpha(0.65 * a);
+        g.setFill(Color.BLACK);
+        g.fillRect(0, 0, BASE_W, BASE_H);
+        g.setGlobalAlpha(1.0);
+
+        // se a imagem existir, desenha com scale/alpha
+        if (victoryImg != null) {
+            double sw = victoryImg.getWidth();
+            double sh = victoryImg.getHeight();
+
+            // escala base para caber (70% da largura, 60% da altura)
+            double baseS = Math.min((BASE_W * 0.70) / sw, (BASE_H * 0.60) / sh);
+            // “pop” suavizado
+            double pop = 0.82 + 0.18 * easeOutBack(victoryT);
+            double s   = baseS * pop;
+
+            double dw = sw * s;
+            double dh = sh * s;
+            double dx = (BASE_W - dw) / 2.0;
+            double dy = (BASE_H - dh) / 2.0;
+
+            g.setGlobalAlpha(a);
+            g.drawImage(victoryImg, 0, 0, sw, sh, dx, dy, dw, dh);
+            g.setGlobalAlpha(1.0);
+
+            // (opcional) escreve o nome do vencedor por cima, se quiser manter dinâmico
+            // com sombra/contorno leve para legibilidade
+            if (winnerName != null && !winnerName.isBlank()) {
+                g.setFont(Font.font("Impact", Math.max(48, dh * 0.14)));
+                double tw = textWidth(g, winnerName);
+                double tx = (BASE_W - tw) / 2.0;
+                double ty = dy + dh * 0.72; // ajuste vertical (área da faixa)
+
+                g.setGlobalAlpha(a);
+                g.setFill(Color.color(0,0,0,0.65)); g.fillText(winnerName, tx+3, ty+3);
+                g.setFill(Color.WHITE);              g.fillText(winnerName, tx,   ty);
+                g.setGlobalAlpha(1.0);
+            }
+        } else {
+            // fallback simples se a imagem não estiver no classpath
+            g.setFill(Color.WHITE);
+            g.setFont(Font.font("Impact", 74));
+            String t1 = "VITÓRIA!";
+            double tw1 = textWidth(g, t1);
+            g.fillText(t1, (BASE_W - tw1)/2, BASE_H/2.0 - 10);
+
+            g.setFont(Font.font("Impact", 56));
+            double tw2 = textWidth(g, winnerName);
+            g.fillText(winnerName, (BASE_W - tw2)/2, BASE_H/2.0 + 56);
+        }
+    }
+
+    // Helpers de easing
+    private static double easeInOutQuad(double t) {
+        return (t < 0.5) ? (2*t*t) : (1 - Math.pow(-2*t + 2, 2)/2.0);
+    }
+    private static double easeOutBack(double t) {
+        double c1 = 1.70158;
+        double c3 = c1 + 1;
+        return 1 + c3*Math.pow(t-1, 3) + c1*Math.pow(t-1, 2);
+    }
+
+    // largura de string no Canvas (sem APIs internas)
+    private double textWidth(GraphicsContext g, String s) {
+        Text t = new Text(s);
+        t.setFont(g.getFont());
+        return t.getLayoutBounds().getWidth();
+    }
+
+    // Loader seguro (evita NPE se o recurso não for encontrado)
+    private Image safeLoad(String path) {
+        try (InputStream in = getClass().getResourceAsStream(path)) {
+            return (in == null) ? null : new Image(in, 0, 0, false, false);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 }
+
