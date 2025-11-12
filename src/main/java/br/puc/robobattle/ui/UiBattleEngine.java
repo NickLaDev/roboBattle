@@ -23,11 +23,11 @@ public class UiBattleEngine {
         public final String winner;
 
         Snapshot(String currentName, String enemyName,
-                 int currentHp, int currentMaxHp, int enemyHp, int enemyMaxHp,
-                 boolean currentGuarding, boolean enemyGuarding,
-                 boolean currentBleeding, boolean enemyBleeding,
-                 boolean currentSpecial, boolean enemySpecial,
-                 int round, boolean finished, String winner) {
+                int currentHp, int currentMaxHp, int enemyHp, int enemyMaxHp,
+                boolean currentGuarding, boolean enemyGuarding,
+                boolean currentBleeding, boolean enemyBleeding,
+                boolean currentSpecial, boolean enemySpecial,
+                int round, boolean finished, String winner) {
             this.currentName = currentName;
             this.enemyName = enemyName;
             this.currentHp = currentHp;
@@ -49,7 +49,10 @@ public class UiBattleEngine {
     public static class StepResult {
         public final List<String> logs = new ArrayList<>();
         public final Snapshot snapshot;
-        StepResult(Snapshot s) { this.snapshot = s; }
+
+        StepResult(Snapshot s) {
+            this.snapshot = s;
+        }
     }
 
     private final DamageCalculator calc = new DamageCalculator();
@@ -61,7 +64,8 @@ public class UiBattleEngine {
     private String winnerName = null;
 
     public UiBattleEngine(Player p1, Player p2) {
-        this.p1 = p1; this.p2 = p2;
+        this.p1 = p1;
+        this.p2 = p2;
         this.current = rng.nextBoolean() ? p1 : p2;
         this.enemy = (current == p1) ? p2 : p1;
     }
@@ -74,13 +78,13 @@ public class UiBattleEngine {
                 current.robot().isGuarding(), enemy.robot().isGuarding(),
                 current.robot().isBleeding(), enemy.robot().isBleeding(),
                 current.robot().isSpecialAvailable(), enemy.robot().isSpecialAvailable(),
-                round, finished, winnerName
-        );
+                round, finished, winnerName);
     }
 
     public StepResult perform(Action action) {
         List<String> logs = new ArrayList<>();
-        if (finished) return pack(logs);
+        if (finished)
+            return pack(logs);
 
         // Tick de sangramento no INÍCIO do turno do current
         int bleedTick = current.robot().tickBleed();
@@ -138,7 +142,9 @@ public class UiBattleEngine {
         }
 
         // troca turno
-        Player tmp = current; current = enemy; enemy = tmp;
+        Player tmp = current;
+        current = enemy;
+        enemy = tmp;
         round++;
         return pack(logs);
     }

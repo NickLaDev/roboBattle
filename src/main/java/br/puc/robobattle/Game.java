@@ -5,6 +5,8 @@ import br.puc.robobattle.items.Module;
 import br.puc.robobattle.items.Weapon;
 import br.puc.robobattle.items.Armor;
 import br.puc.robobattle.model.Player;
+import br.puc.robobattle.model.CharacterClass;
+import br.puc.robobattle.model.AbilityEffect;
 import br.puc.robobattle.model.Robot;
 
 import java.util.Scanner;
@@ -90,6 +92,28 @@ public class Game {
         }
     }
 
+    private static CharacterClass askCharacterClass(Scanner in) {
+        CharacterClass[] classes = CharacterClass.values();
+        while (true) {
+            System.out.println("\nPersonagens disponíveis:");
+            for (int i = 0; i < classes.length; i++) {
+                CharacterClass cc = classes[i];
+                AbilityEffect ability = cc.ability();
+                System.out.printf("%d) %s%n", i + 1, cc.displayName());
+                System.out.printf("   %s%n", cc.description());
+                System.out.printf("   Especial: %s — %s%n", ability.name(), ability.description());
+            }
+            System.out.print("Escolha o personagem (1-" + classes.length + "): ");
+            String s = in.nextLine().trim();
+            try {
+                int idx = Integer.parseInt(s) - 1;
+                if (idx >= 0 && idx < classes.length)
+                    return classes[idx];
+            } catch (NumberFormatException ignored) {}
+            System.out.println("Opção inválida.");
+        }
+    }
+
     // ======== NOVO: imprime a tabela de preço por nível ANTES da escolha ========
     private static void printPriceTable(String label, int credits, int subtotal) {
         System.out.printf("%nTabela de preços — %s (Créditos atuais: %d)%n", label, credits);
@@ -114,6 +138,9 @@ public class Game {
         System.out.printf("%n=== Loja do(a) %s | Créditos: %d ===%n", p.name(), p.credits());
 
         int subtotal = 0;
+
+        // ======== PERSONAGEM ========
+        CharacterClass character = askCharacterClass(in);
 
         // ======== ARMA: mostrar preços antes de escolher ========
         printPriceTable("ARMA", p.credits(), subtotal);
@@ -143,13 +170,16 @@ public class Game {
         Weapon w = new Weapon("Arma N" + wLvl, wLvl);
         Armor  a = new Armor("Armadura N" + aLvl, aLvl);
         Module m = new Module(mType, mLvl);
-        Robot preview = new Robot(w, a, m);
+        Robot preview = new Robot(character, w, a, m);
 
         System.out.printf("%nResumo da compra (total = %d, saldo pós-compra = %d):%n", total, p.credits() - total);
-        System.out.printf("HP=%d  ATK=%d  DEF=%d  CRIT=%.1f%%  EVADE=%.1f%%  SPECIAL=%s%n",
+        AbilityEffect ability = character.ability();
+        System.out.printf("Personagem: %s — Especial: %s%n", character.displayName(), ability.name());
+        System.out.printf("Descrição do especial: %s%n", ability.description());
+        System.out.printf("HP=%d  ATK=%d  DEF=%d  CRIT=%.1f%%  EVADE=%.1f%%  Cargas de especial=%d%n",
                 preview.stats().maxHp, preview.stats().atk, preview.stats().def,
                 preview.stats().crit * 100.0, preview.stats().evade * 100.0,
-                (preview.isSpecialAvailable() ? "SIM (BATERIA)" : "NÃO"));
+                preview.specialCharges());
 
         if (total > p.credits()) {
             System.out.println("Créditos insuficientes para esta configuração.");

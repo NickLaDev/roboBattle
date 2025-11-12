@@ -4,9 +4,13 @@ import br.puc.robobattle.items.Armor;
 import br.puc.robobattle.items.Weapon;
 import br.puc.robobattle.model.Player;
 import br.puc.robobattle.model.Robot;
+import br.puc.robobattle.model.CharacterClass;
+import br.puc.robobattle.model.AbilityEffect;
 import javafx.application.Application;
+import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.IntegerProperty;
 import javafx.beans.property.SimpleIntegerProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Node;
@@ -22,6 +26,7 @@ import javafx.stage.Stage;
 
 import java.io.InputStream;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.function.IntSupplier;
 import java.util.function.IntUnaryOperator;
@@ -38,8 +43,8 @@ public class GameFX extends Application {
 
     // ===== Recursos =====
     private static final String INTRO_BG = "/assets/ui/intro.png";
-    private static final String SHOP_BG  = "/assets/ui/shop.png";
-    private static final String SWORD_FMT  = "/assets/items/swords/sword%d.png";
+    private static final String SHOP_BG = "/assets/ui/shop.png";
+    private static final String SWORD_FMT = "/assets/items/swords/sword%d.png";
     private static final String SHIELD_FMT = "/assets/items/shields/shield%d.png";
 
     // ===== Jogo =====
@@ -53,7 +58,13 @@ public class GameFX extends Application {
     public static class Purchase {
         public final Robot robot;
         public final int totalCost;
-        public Purchase(Robot robot, int totalCost) { this.robot = robot; this.totalCost = totalCost; }
+        public final CharacterClass character;
+
+        public Purchase(CharacterClass character, Robot robot, int totalCost) {
+            this.character = character;
+            this.robot = robot;
+            this.totalCost = totalCost;
+        }
     }
 
     @Override
@@ -115,8 +126,10 @@ public class GameFX extends Application {
         };
         enterBtn.setOnAction(e -> submit.run());
         scene.setOnKeyPressed(e -> {
-            if (e.getCode() == KeyCode.ENTER) submit.run();
-            if (e.getCode() == KeyCode.ESCAPE) stage.close();
+            if (e.getCode() == KeyCode.ENTER)
+                submit.run();
+            if (e.getCode() == KeyCode.ESCAPE)
+                stage.close();
         });
 
         tf1.requestFocus();
@@ -132,16 +145,16 @@ public class GameFX extends Application {
         tf.setPadding(new Insets(0, 10, 0, 10));
         tf.setFont(Font.font(FIELD_FONT_SIZE));
         tf.setStyle("""
-            -fx-background-color: transparent;
-            -fx-background-insets: 0;
-            -fx-background-radius: 0;
-            -fx-border-color: transparent;
-            -fx-text-fill: #EDE9FE;
-            -fx-prompt-text-fill: rgba(229,231,235,0.75);
-            -fx-caret-color: #BB86FC;
-            -fx-highlight-fill: rgba(187,134,252,0.35);
-            -fx-highlight-text-fill: white;
-        """);
+                    -fx-background-color: transparent;
+                    -fx-background-insets: 0;
+                    -fx-background-radius: 0;
+                    -fx-border-color: transparent;
+                    -fx-text-fill: #EDE9FE;
+                    -fx-prompt-text-fill: rgba(229,231,235,0.75);
+                    -fx-caret-color: #BB86FC;
+                    -fx-highlight-fill: rgba(187,134,252,0.35);
+                    -fx-highlight-text-fill: white;
+                """);
         return tf;
     }
 
@@ -160,12 +173,13 @@ public class GameFX extends Application {
         final int credits = player.credits();
 
         // seleção
+        ObjectProperty<CharacterClass> characterPick = new SimpleObjectProperty<>(CharacterClass.BEATRIZ);
         IntegerProperty weaponLvl = new SimpleIntegerProperty(0);
-        IntegerProperty armorLvl  = new SimpleIntegerProperty(0);
+        IntegerProperty armorLvl = new SimpleIntegerProperty(0);
 
         // custo real pelas classes
-        IntUnaryOperator weaponCost = lvl -> (lvl <= 0) ? 0 : new Weapon("N"+lvl, lvl).getCost();
-        IntUnaryOperator armorCost  = lvl -> (lvl <= 0) ? 0 : new Armor("N"+lvl, lvl).getCost();
+        IntUnaryOperator weaponCost = lvl -> (lvl <= 0) ? 0 : new Weapon("N" + lvl, lvl).getCost();
+        IntUnaryOperator armorCost = lvl -> (lvl <= 0) ? 0 : new Armor("N" + lvl, lvl).getCost();
 
         // ====== fundo ======
         Image bgImg = load(SHOP_BG);
@@ -180,31 +194,44 @@ public class GameFX extends Application {
                 bgImg, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,
                 BackgroundPosition.CENTER, new BackgroundSize(IMG_W, IMG_H, false, false, false, false))));
 
+        // ====== seleção de personagem ======
+        VBox characterCard = buildCharacterSelector(characterPick);
+
         // ====== strips (com preço no tile) ======
         StripControl swords = itemStrip(
                 "ESPADAS", SWORD_FMT, "Sem arma", weaponLvl,
                 () -> credits - armorCost.applyAsInt(armorLvl.get()),
-                weaponCost
-        );
+                weaponCost);
         StripControl shields = itemStrip(
                 "ESCUDOS", SHIELD_FMT, "Sem escudo", armorLvl,
                 () -> credits - weaponCost.applyAsInt(weaponLvl.get()),
-                armorCost
-        );
+                armorCost);
         // cross-refresh (quando um muda, recalcula acessibilidade do outro)
-        weaponLvl.addListener((o,a,b) -> shields.refresh.run());
-        armorLvl.addListener((o,a,b) -> swords.refresh.run());
+        weaponLvl.addListener((o, a, b) -> shields.refresh.run());
+        armorLvl.addListener((o, a, b) -> swords.refresh.run());
 
         // ====== prévias ======
-        ImageView swordPreview  = bigPreview();
+        ImageView swordPreview = bigPreview();
         ImageView shieldPreview = bigPreview();
         bindPreview(weaponLvl, swordPreview, SWORD_FMT);
-        bindPreview(armorLvl,  shieldPreview, SHIELD_FMT);
+        bindPreview(armorLvl, shieldPreview, SHIELD_FMT);
+
+        Label abilityName = new Label();
+        abilityName.setTextFill(Color.web("#EDE9FE"));
+        abilityName.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+        Label abilityDesc = new Label();
+        abilityDesc.setTextFill(Color.web("#EDE9FE"));
+        abilityDesc.setWrapText(true);
+        abilityDesc.setStyle("-fx-font-size: 12px;");
+
+        VBox abilityBox = new VBox(4, abilityName, abilityDesc);
+        abilityBox.setAlignment(Pos.TOP_LEFT);
+        VBox abilityCard = translucentCard("Habilidade especial", abilityBox);
 
         HBox previews = new HBox(24,
                 translucentCard("Arma escolhida", swordPreview),
-                translucentCard("Escudo escolhido", shieldPreview)
-        );
+                translucentCard("Escudo escolhido", shieldPreview),
+                abilityCard);
         previews.setAlignment(Pos.CENTER);
 
         // ====== barra inferior ======
@@ -218,7 +245,10 @@ public class GameFX extends Application {
         Button btnPreview = primaryButton("Pré-visualizar");
         Button btnConfirm = primaryButton("Confirmar compra");
 
-        HBox bottom = new HBox(16, btnPreview, new Region(), lblCred, lblSubtotal, lblSaldo, btnConfirm);
+        Label lblAbility = new Label();
+        lblAbility.setTextFill(Color.web("#EDE9FE"));
+
+        HBox bottom = new HBox(16, btnPreview, new Region(), lblCred, lblSubtotal, lblSaldo, lblAbility, btnConfirm);
         HBox.setHgrow(bottom.getChildren().get(1), Priority.ALWAYS);
         bottom.setAlignment(Pos.CENTER_LEFT);
         bottom.setPadding(new Insets(10));
@@ -229,13 +259,14 @@ public class GameFX extends Application {
 
         // ====== adicionar no "board" e posicionar por porcentagem do fundo ======
         // regiões pensadas para casar com os nichos da sua arte:
-        // esquerda:  x=6.5%  y=18%  w=30%  h=56%
-        // direita:   x=63.5% y=18%  w=30%  h=56%
-        // centro-inf: x=25%  y=76%  w=50%  h=18%
-        board.getChildren().addAll(swords.node, shields.node, centerBox);
-        placePct(swords.node,  0.065, 0.18, 0.30, 0.56, IMG_W, IMG_H);
-        placePct(shields.node, 0.635, 0.18, 0.30, 0.56, IMG_W, IMG_H);
-        placePct(centerBox,    0.250, 0.76, 0.50, 0.18, IMG_W, IMG_H);
+        // esquerda: x=6.5% y=18% w=30% h=56%
+        // direita: x=63.5% y=18% w=30% h=56%
+        // centro-inf: x=25% y=76% w=50% h=18%
+        board.getChildren().addAll(characterCard, swords.node, shields.node, centerBox);
+        placePct(characterCard, 0.25, 0.05, 0.50, 0.18, IMG_W, IMG_H);
+        placePct(swords.node, 0.065, 0.26, 0.30, 0.48, IMG_W, IMG_H);
+        placePct(shields.node, 0.635, 0.26, 0.30, 0.48, IMG_W, IMG_H);
+        placePct(centerBox, 0.250, 0.76, 0.50, 0.20, IMG_W, IMG_H);
 
         // ====== lógica do resumo ======
         Runnable refreshSummary = () -> {
@@ -244,26 +275,51 @@ public class GameFX extends Application {
             int saldo = credits - sub;
             lblSaldo.setText("Saldo pós-compra: " + saldo);
             lblSaldo.setTextFill(saldo < 0 ? Color.web("#F87171") : Color.web("#EDE9FE"));
+            CharacterClass cc = characterPick.get();
+            AbilityEffect ability = cc.ability();
+            abilityName.setText(ability.name());
+            abilityDesc.setText(ability.description());
+            lblAbility.setText("Especial: " + ability.name());
         };
-        weaponLvl.addListener((o,a,b) -> refreshSummary.run());
-        armorLvl.addListener((o,a,b) -> refreshSummary.run());
+        weaponLvl.addListener((o, a, b) -> refreshSummary.run());
+        armorLvl.addListener((o, a, b) -> refreshSummary.run());
+        characterPick.addListener((o, a, b) -> refreshSummary.run());
         refreshSummary.run();
 
         btnPreview.setOnAction(e -> {
-            Purchase p = buildPurchase(credits, weaponLvl.get(), armorLvl.get(), weaponCost, armorCost);
-            if (p == null) { alert("Créditos insuficientes para esta configuração."); return; }
+            Purchase p = buildPurchase(credits, characterPick.get(), weaponLvl.get(), armorLvl.get(), weaponCost,
+                    armorCost);
+            if (p == null) {
+                alert("Créditos insuficientes para esta configuração.");
+                return;
+            }
             alert(String.format(
-                    "Prévia:\nHP=%d  ATK=%d  DEF=%d  CRIT=%.1f%%  EVADE=%.1f%%",
+                    "Personagem: %s\nHabilidade: %s\nHP=%d  ATK=%d  DEF=%d  CRIT=%.1f%%  EVADE=%.1f%%  Cargas de especial=%d",
+                    p.character.displayName(),
+                    p.character.ability().name(),
                     p.robot.stats().maxHp, p.robot.stats().atk, p.robot.stats().def,
-                    p.robot.stats().crit*100, p.robot.stats().evade*100
-            ));
+                    p.robot.stats().crit * 100, p.robot.stats().evade * 100,
+                    p.robot.specialCharges()));
         });
 
         btnConfirm.setOnAction(e -> {
-            Purchase p = buildPurchase(credits, weaponLvl.get(), armorLvl.get(), weaponCost, armorCost);
-            if (p == null) { alert("Créditos insuficientes para esta configuração."); return; }
-            if (!player.buyAndEquip(p.robot, p.totalCost)) { alert("Falha ao equipar. Tente novamente."); return; }
-            if (isFirstPlayer) { pur1 = p; showShopScreen(p2, false); } else { pur2 = p; showBattleScreen(); }
+            Purchase p = buildPurchase(credits, characterPick.get(), weaponLvl.get(), armorLvl.get(), weaponCost,
+                    armorCost);
+            if (p == null) {
+                alert("Créditos insuficientes para esta configuração.");
+                return;
+            }
+            if (!player.buyAndEquip(p.robot, p.totalCost)) {
+                alert("Falha ao equipar. Tente novamente.");
+                return;
+            }
+            if (isFirstPlayer) {
+                pur1 = p;
+                showShopScreen(p2, false);
+            } else {
+                pur2 = p;
+                showBattleScreen();
+            }
         });
 
         // ====== cena com escalonamento automático do tabuleiro ======
@@ -276,8 +332,8 @@ public class GameFX extends Application {
             board.setScaleX(s);
             board.setScaleY(s);
         };
-        scene.widthProperty().addListener((o,a,b) -> rescale.run());
-        scene.heightProperty().addListener((o,a,b) -> rescale.run());
+        scene.widthProperty().addListener((o, a, b) -> rescale.run());
+        scene.heightProperty().addListener((o, a, b) -> rescale.run());
         rescale.run();
 
         stage.setScene(scene);
@@ -285,7 +341,7 @@ public class GameFX extends Application {
 
     // ---- helpers de posicionamento por porcentagem do fundo ----
     private static void placePct(Region node, double px, double py, double pw, double ph,
-                                 double imgW, double imgH) {
+            double imgW, double imgH) {
         node.setLayoutX(px * imgW);
         node.setLayoutY(py * imgH);
         node.setPrefSize(pw * imgW, ph * imgH);
@@ -315,32 +371,32 @@ public class GameFX extends Application {
     private Button primaryButton(String text) {
         Button b = new Button(text);
         b.setStyle("""
-            -fx-font-weight: bold;
-            -fx-text-fill: white;
-            -fx-background-color: linear-gradient(#6D28D9, #4C1D95);
-            -fx-background-radius: 12;
-            -fx-padding: 8 14 8 14;
-            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 10, 0.3, 0, 2);
-            -fx-cursor: hand;
-        """);
+                    -fx-font-weight: bold;
+                    -fx-text-fill: white;
+                    -fx-background-color: linear-gradient(#6D28D9, #4C1D95);
+                    -fx-background-radius: 12;
+                    -fx-padding: 8 14 8 14;
+                    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 10, 0.3, 0, 2);
+                    -fx-cursor: hand;
+                """);
         b.setOnMouseEntered(ev -> b.setStyle("""
-            -fx-font-weight: bold;
-            -fx-text-fill: white;
-            -fx-background-color: linear-gradient(#7C3AED, #5B21B6);
-            -fx-background-radius: 12;
-            -fx-padding: 8 14 8 14;
-            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 12, 0.35, 0, 3);
-            -fx-cursor: hand;
-        """));
+                    -fx-font-weight: bold;
+                    -fx-text-fill: white;
+                    -fx-background-color: linear-gradient(#7C3AED, #5B21B6);
+                    -fx-background-radius: 12;
+                    -fx-padding: 8 14 8 14;
+                    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 12, 0.35, 0, 3);
+                    -fx-cursor: hand;
+                """));
         b.setOnMouseExited(ev -> b.setStyle("""
-            -fx-font-weight: bold;
-            -fx-text-fill: white;
-            -fx-background-color: linear-gradient(#6D28D9, #4C1D95);
-            -fx-background-radius: 12;
-            -fx-padding: 8 14 8 14;
-            -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 10, 0.3, 0, 2);
-            -fx-cursor: hand;
-        """));
+                    -fx-font-weight: bold;
+                    -fx-text-fill: white;
+                    -fx-background-color: linear-gradient(#6D28D9, #4C1D95);
+                    -fx-background-radius: 12;
+                    -fx-padding: 8 14 8 14;
+                    -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 10, 0.3, 0, 2);
+                    -fx-cursor: hand;
+                """));
         return b;
     }
 
@@ -350,11 +406,82 @@ public class GameFX extends Application {
         VBox box = new VBox(8, t, content);
         box.setPadding(new Insets(12));
         box.setStyle("""
-            -fx-background-color: rgba(0,0,0,0.38);
-            -fx-background-radius: 14;
-            -fx-text-fill: #EDE9FE;
-        """);
+                    -fx-background-color: rgba(0,0,0,0.38);
+                    -fx-background-radius: 14;
+                    -fx-text-fill: #EDE9FE;
+                """);
         return box;
+    }
+
+    private VBox buildCharacterSelector(ObjectProperty<CharacterClass> selected) {
+        ComboBox<CharacterClass> combo = new ComboBox<>();
+        combo.getItems().addAll(CharacterClass.values());
+        combo.setCellFactory(list -> new ListCell<>() {
+            @Override
+            protected void updateItem(CharacterClass item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    setText(item.displayName() + " — " + item.ability().name());
+                }
+            }
+        });
+        combo.setButtonCell(new ListCell<>() {
+            @Override
+            protected void updateItem(CharacterClass item, boolean empty) {
+                super.updateItem(item, empty);
+                if (empty || item == null) {
+                    setText(null);
+                } else {
+                    setText(item.displayName() + " — " + item.ability().name());
+                }
+            }
+        });
+
+        if (selected.get() == null && !combo.getItems().isEmpty()) {
+            selected.set(combo.getItems().get(0));
+        }
+        combo.setValue(selected.get());
+
+        ImageView portrait = new ImageView();
+        portrait.setFitWidth(140);
+        portrait.setFitHeight(140);
+        portrait.setPreserveRatio(true);
+
+        Label desc = new Label();
+        desc.setWrapText(true);
+        desc.setTextFill(Color.web("#EDE9FE"));
+        desc.setStyle("-fx-font-size: 12px;");
+
+        Runnable refresh = () -> {
+            CharacterClass cc = selected.get();
+            if (cc == null)
+                return;
+            if (combo.getValue() != cc)
+                combo.setValue(cc);
+            desc.setText(cc.description());
+            try {
+                portrait.setImage(load(cc.portraitPath()));
+            } catch (IllegalArgumentException e) {
+                portrait.setImage(null);
+            }
+        };
+
+        combo.valueProperty().addListener((obs, old, val) -> {
+            if (val != null && val != selected.get())
+                selected.set(val);
+        });
+        selected.addListener((obs, old, val) -> refresh.run());
+        refresh.run();
+
+        VBox content = new VBox(10, combo, portrait, desc);
+        content.setAlignment(Pos.TOP_CENTER);
+        content.setFillWidth(true);
+
+        VBox card = translucentCard("Personagem", content);
+        card.setPrefWidth(360);
+        return card;
     }
 
     private ImageView bigPreview() {
@@ -374,37 +501,58 @@ public class GameFX extends Application {
 
     private Image load(String path) {
         InputStream is = getClass().getResourceAsStream(path);
-        if (is == null) throw new IllegalArgumentException("Recurso não encontrado: " + path +
-                " (confira src/main/resources e o nome do arquivo).");
+        if (is == null)
+            throw new IllegalArgumentException("Recurso não encontrado: " + path +
+                    " (confira src/main/resources e o nome do arquivo).");
         return new Image(is, 0, 0, false, false);
     }
 
     // ---- strip de itens com badge de preço e seleção estilizada ----
-    private static class StripControl { final VBox node; final Runnable refresh; StripControl(VBox n, Runnable r){node=n; refresh=r;} }
-    private static class TileRef {
-        final ToggleButton btn; final Label priceTag; final int level; final int price;
-        TileRef(ToggleButton btn, Label priceTag, int level, int price){ this.btn=btn; this.priceTag=priceTag; this.level=level; this.price=price; }
-        void applySelectedStyle(int selected){
-            String bg = (level==selected) ? "rgba(88,28,135,0.55)" : "rgba(20,20,28,0.55)";
-            String bd = (level==selected) ? "#A78BFA" : "#4B5563";
-            btn.setStyle("""
-                -fx-background-color: %s;
-                -fx-background-radius: 14;
-                -fx-border-color: %s;
-                -fx-border-width: 2;
-                -fx-border-radius: 14;
-                -fx-cursor: hand;
-            """.formatted(bg, bd));
+    private static class StripControl {
+        final VBox node;
+        final Runnable refresh;
+
+        StripControl(VBox n, Runnable r) {
+            node = n;
+            refresh = r;
         }
-        void updateAffordability(int available){
+    }
+
+    private static class TileRef {
+        final ToggleButton btn;
+        final Label priceTag;
+        final int level;
+        final int price;
+
+        TileRef(ToggleButton btn, Label priceTag, int level, int price) {
+            this.btn = btn;
+            this.priceTag = priceTag;
+            this.level = level;
+            this.price = price;
+        }
+
+        void applySelectedStyle(int selected) {
+            String bg = (level == selected) ? "rgba(88,28,135,0.55)" : "rgba(20,20,28,0.55)";
+            String bd = (level == selected) ? "#A78BFA" : "#4B5563";
+            btn.setStyle("""
+                        -fx-background-color: %s;
+                        -fx-background-radius: 14;
+                        -fx-border-color: %s;
+                        -fx-border-width: 2;
+                        -fx-border-radius: 14;
+                        -fx-cursor: hand;
+                    """.formatted(bg, bd));
+        }
+
+        void updateAffordability(int available) {
             boolean ok = price <= available;
             priceTag.setTextFill(ok ? Color.web("#A7F3D0") : Color.web("#FCA5A5"));
             priceTag.setStyle("""
-                -fx-font-size: 11px;
-                -fx-background-color: rgba(0,0,0,0.55);
-                -fx-background-radius: 9;
-                -fx-padding: 2 6 2 6;
-            """);
+                        -fx-font-size: 11px;
+                        -fx-background-color: rgba(0,0,0,0.55);
+                        -fx-background-radius: 9;
+                        -fx-padding: 2 6 2 6;
+                    """);
         }
     }
 
@@ -456,14 +604,15 @@ public class GameFX extends Application {
         iv.setPreserveRatio(true);
         iv.setFitWidth(72);
         iv.setFitHeight(72);
-        if (img != null) iv.setImage(img);
+        if (img != null)
+            iv.setImage(img);
 
         Label priceTag = new Label(price == 0 ? "Grátis" : (price + " cr"));
         priceTag.setTextFill(Color.web("#A7F3D0"));
 
         StackPane box = new StackPane(iv);
         StackPane.setAlignment(priceTag, Pos.BOTTOM_RIGHT);
-        StackPane.setMargin(priceTag, new Insets(0,6,6,0));
+        StackPane.setMargin(priceTag, new Insets(0, 6, 6, 0));
         box.getChildren().add(priceTag);
         box.setPrefSize(84, 84);
 
@@ -482,17 +631,22 @@ public class GameFX extends Application {
         return ref;
     }
 
-    private Purchase buildPurchase(int credits, int wLvl, int aLvl,
-                                   IntUnaryOperator weaponCost, IntUnaryOperator armorCost) {
+    private Purchase buildPurchase(int credits, CharacterClass character, int wLvl, int aLvl,
+            IntUnaryOperator weaponCost, IntUnaryOperator armorCost) {
         int total = weaponCost.applyAsInt(wLvl) + armorCost.applyAsInt(aLvl);
-        if (total > credits) return null;
+        if (total > credits)
+            return null;
         Weapon w = (wLvl <= 0) ? null : new Weapon("Arma N" + wLvl, wLvl);
-        Armor  a = (aLvl <= 0) ? null : new Armor("Armadura N" + aLvl, aLvl);
-        Robot preview = new Robot(w, a, null); // sem módulo
-        return new Purchase(preview, total);
+        Armor a = (aLvl <= 0) ? null : new Armor("Armadura N" + aLvl, aLvl);
+        Robot preview = new Robot(character, w, a, null); // sem módulo
+        return new Purchase(character, preview, total);
     }
 
-    private void alert(String msg) { new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK).showAndWait(); }
+    private void alert(String msg) {
+        new Alert(Alert.AlertType.INFORMATION, msg, ButtonType.OK).showAndWait();
+    }
 
-    public static void main(String[] args) { launch(args); }
+    public static void main(String[] args) {
+        launch(args);
+    }
 }

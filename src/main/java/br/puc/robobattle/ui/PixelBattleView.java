@@ -23,7 +23,8 @@ import java.util.Random;
 
 /**
  * View de batalha com spritesheets (idle/attack/run/defend/hurt/death).
- * Mostra imagem de vitória com transição suave (fade + pop) quando a luta termina.
+ * Mostra imagem de vitória com transição suave (fade + pop) quando a luta
+ * termina.
  */
 public class PixelBattleView {
 
@@ -35,8 +36,8 @@ public class PixelBattleView {
     private static final int R_Y = 480;
     private static final int GAP = 80;
 
-    private static final double RUN_SPEED = 900.0;  // px/s
-    private static final int HIT_OVERLAP = 20;      // invade um pouco o centro
+    private static final double RUN_SPEED = 900.0; // px/s
+    private static final int HIT_OVERLAP = 20; // invade um pouco o centro
 
     private final UiBattleEngine engine;
 
@@ -86,20 +87,23 @@ public class PixelBattleView {
 
     // FPS
     private final double idleFps1 = 6.0, idleFps2 = 6.0;
-    private final double[] atkFps1 = {10.0, 12.0, 14.0};
-    private final double[] atkFps2 = {12.0, 14.0, 16.0};
-    private final double runFps1   = 14.0, runFps2   = 14.0;
+    private final double[] atkFps1 = { 10.0, 12.0, 14.0 };
+    private final double[] atkFps2 = { 12.0, 14.0, 16.0 };
+    private final double runFps1 = 14.0, runFps2 = 14.0;
     private final double defendFps1 = 10.0, defendFps2 = 10.0;
-    private final double hurtFps1   = 12.0, hurtFps2   = 12.0;
-    private final double deathFps1  = 8.0,  deathFps2  = 8.0;
+    private final double hurtFps1 = 12.0, hurtFps2 = 12.0;
+    private final double deathFps1 = 8.0, deathFps2 = 8.0;
 
     // Cinemática de aproximação
-    private enum Phase { NONE, APPROACH, IMPACT, RETURN }
+    private enum Phase {
+        NONE, APPROACH, IMPACT, RETURN
+    }
+
     private Phase phase = Phase.NONE;
-    private boolean attackerIsP1 = true;          // baseado em before.currentName == leftName
+    private boolean attackerIsP1 = true; // baseado em before.currentName == leftName
     private boolean inputLocked = false;
-    private Action pendingAction = null;          // ATTACK ou SPECIAL
-    private UiBattleEngine.Snapshot beforeSnap;   // snapshot antes do impacto
+    private Action pendingAction = null; // ATTACK ou SPECIAL
+    private UiBattleEngine.Snapshot beforeSnap; // snapshot antes do impacto
     private double approachTarget = 0;
     private double attackTimer = 0;
 
@@ -119,14 +123,14 @@ public class PixelBattleView {
     private final String rightName;
 
     // === Vitória (imagem + transição) ===
-    private Image victoryImg;         // /assets/ui/victory.png
-    private double victoryT = 0.0;    // 0→1 (animação)
+    private Image victoryImg; // /assets/ui/victory.png
+    private double victoryT = 0.0; // 0→1 (animação)
     private boolean victoryBoot = false;
 
     public PixelBattleView(UiBattleEngine engine) {
         this.engine = engine;
         var snap = engine.snapshot();
-        this.leftName  = snap.currentName;
+        this.leftName = snap.currentName;
         this.rightName = snap.enemyName;
     }
 
@@ -202,16 +206,16 @@ public class PixelBattleView {
         lblTurn.setAlignment(Pos.CENTER);
         lblTurn.setTextFill(Color.web("#ffe9b6"));
         lblTurn.setStyle("""
-            -fx-font-family: "Georgia", "Times New Roman", serif;
-            -fx-font-size: 22px;
-            -fx-font-weight: bold;
-            -fx-padding: 8 20 8 20;
-            -fx-background-color: linear-gradient(rgba(35,22,45,0.84), rgba(25,16,32,0.84));
-            -fx-background-radius: 18;
-            -fx-border-radius: 18;
-            -fx-border-color: rgba(252, 211, 77, 0.85);
-            -fx-border-width: 2;
-        """);
+                    -fx-font-family: "Georgia", "Times New Roman", serif;
+                    -fx-font-size: 22px;
+                    -fx-font-weight: bold;
+                    -fx-padding: 8 20 8 20;
+                    -fx-background-color: linear-gradient(rgba(35,22,45,0.84), rgba(25,16,32,0.84));
+                    -fx-background-radius: 18;
+                    -fx-border-radius: 18;
+                    -fx-border-color: rgba(252, 211, 77, 0.85);
+                    -fx-border-width: 2;
+                """);
         DropShadow bannerGlow = new DropShadow(26, Color.web("#f59e0b"));
         bannerGlow.setSpread(0.15);
         lblTurn.setEffect(bannerGlow);
@@ -251,17 +255,24 @@ public class PixelBattleView {
 
         // Atalhos 1/2/3
         scene.setOnKeyPressed(ev -> {
-            if (inputLocked || engine.snapshot().finished) return;
-            if (ev.getCode() == KeyCode.DIGIT1) btnAtk.fire();
-            else if (ev.getCode() == KeyCode.DIGIT2) btnDef.fire();
-            else if (ev.getCode() == KeyCode.DIGIT3 && !btnSpc.isDisabled()) btnSpc.fire();
+            if (inputLocked || engine.snapshot().finished)
+                return;
+            if (ev.getCode() == KeyCode.DIGIT1)
+                btnAtk.fire();
+            else if (ev.getCode() == KeyCode.DIGIT2)
+                btnDef.fire();
+            else if (ev.getCode() == KeyCode.DIGIT3 && !btnSpc.isDisabled())
+                btnSpc.fire();
         });
 
         // ==== GAME LOOP ====
         loop = new AnimationTimer() {
             long last = 0;
-            @Override public void handle(long now) {
-                if (last == 0) last = now;
+
+            @Override
+            public void handle(long now) {
+                if (last == 0)
+                    last = now;
                 double dt = (now - last) / 1_000_000_000.0;
                 last = now;
                 update(dt);
@@ -291,29 +302,29 @@ public class PixelBattleView {
     // ======== Estilos ========
     private String bannerStyle(String accentHex) {
         return """
-            -fx-font-family: "Georgia", "Times New Roman", serif;
-            -fx-font-size: 22px;
-            -fx-font-weight: bold;
-            -fx-padding: 8 20 8 20;
-            -fx-background-color: linear-gradient(rgba(35,22,45,0.84), rgba(25,16,32,0.84));
-            -fx-background-radius: 18;
-            -fx-border-radius: 18;
-            -fx-border-color: %s;
-            -fx-border-width: 2;
-        """.formatted(Color.web(accentHex, 0.9).toString().replace("0x", "#"));
+                    -fx-font-family: "Georgia", "Times New Roman", serif;
+                    -fx-font-size: 22px;
+                    -fx-font-weight: bold;
+                    -fx-padding: 8 20 8 20;
+                    -fx-background-color: linear-gradient(rgba(35,22,45,0.84), rgba(25,16,32,0.84));
+                    -fx-background-radius: 18;
+                    -fx-border-radius: 18;
+                    -fx-border-color: %s;
+                    -fx-border-width: 2;
+                """.formatted(Color.web(accentHex, 0.9).toString().replace("0x", "#"));
     }
 
     private String pedestalStyle(String accentHex) {
         String border = Color.web(accentHex, 0.75).toString().replace("0x", "#");
         return """
-            -fx-background-color:
-              linear-gradient(rgba(24,18,30,0.85), rgba(18,12,24,0.85)),
-              radial-gradient(radius 100%%, rgba(255,255,255,0.06), rgba(0,0,0,0.06));
-            -fx-background-radius: 16;
-            -fx-border-radius: 16;
-            -fx-border-color: %s;
-            -fx-border-width: 2;
-        """.formatted(border);
+                    -fx-background-color:
+                      linear-gradient(rgba(24,18,30,0.85), rgba(18,12,24,0.85)),
+                      radial-gradient(radius 100%%, rgba(255,255,255,0.06), rgba(0,0,0,0.06));
+                    -fx-background-radius: 16;
+                    -fx-border-radius: 16;
+                    -fx-border-color: %s;
+                    -fx-border-width: 2;
+                """.formatted(border);
     }
 
     private Button makeStoneButton(String text) {
@@ -321,21 +332,35 @@ public class PixelBattleView {
         b.setFocusTraversable(false);
         b.setTextFill(Color.web("#f5f3ff"));
         b.setStyle("""
-           -fx-font-size: 16px;
-           -fx-font-weight: bold;
-           -fx-background-radius: 12;
-           -fx-border-radius: 12;
-           -fx-padding: 8 20 8 20;
-           -fx-background-color: linear-gradient(#3a2f47, #1f182a);
-           -fx-border-color: rgba(255,255,255,0.15);
-           -fx-border-width: 1.2;
-        """);
+                   -fx-font-size: 16px;
+                   -fx-font-weight: bold;
+                   -fx-background-radius: 12;
+                   -fx-border-radius: 12;
+                   -fx-padding: 8 20 8 20;
+                   -fx-background-color: linear-gradient(#3a2f47, #1f182a);
+                   -fx-border-color: rgba(255,255,255,0.15);
+                   -fx-border-width: 1.2;
+                """);
         DropShadow glow = new DropShadow(20, Color.web("#c084fc"));
         glow.setSpread(0.18);
-        b.setOnMouseEntered(e -> { b.setEffect(glow); b.setScaleX(1.05); b.setScaleY(1.05); });
-        b.setOnMouseExited (e -> { b.setEffect(null); b.setScaleX(1.0); b.setScaleY(1.0); });
-        b.setOnMousePressed(e -> { b.setScaleX(0.96); b.setScaleY(0.96); });
-        b.setOnMouseReleased(e -> { b.setScaleX(1.05); b.setScaleY(1.05); });
+        b.setOnMouseEntered(e -> {
+            b.setEffect(glow);
+            b.setScaleX(1.05);
+            b.setScaleY(1.05);
+        });
+        b.setOnMouseExited(e -> {
+            b.setEffect(null);
+            b.setScaleX(1.0);
+            b.setScaleY(1.0);
+        });
+        b.setOnMousePressed(e -> {
+            b.setScaleX(0.96);
+            b.setScaleY(0.96);
+        });
+        b.setOnMouseReleased(e -> {
+            b.setScaleX(1.05);
+            b.setScaleY(1.05);
+        });
         return b;
     }
 
@@ -345,7 +370,10 @@ public class PixelBattleView {
 
         if (snap.finished) {
             // inicializa o fade/pop uma única vez
-            if (!victoryBoot) { victoryBoot = true; victoryT = 0.0; }
+            if (!victoryBoot) {
+                victoryBoot = true;
+                victoryT = 0.0;
+            }
             victoryT = Math.min(1.0, victoryT + dt * 1.6); // velocidade da transição
             return;
         }
@@ -356,20 +384,32 @@ public class PixelBattleView {
                 if (attackerIsP1) {
                     anim1Run.update(dt);
                     r1OffsetX = clamp(r1OffsetX + RUN_SPEED * dt, 0, approachTarget);
-                    if (r1OffsetX >= approachTarget - 1e-3) startImpact();
+                    if (r1OffsetX >= approachTarget - 1e-3)
+                        startImpact();
                 } else {
                     anim2Run.update(dt);
                     r2OffsetX = clamp(r2OffsetX - RUN_SPEED * dt, -approachTarget, 0);
-                    if (Math.abs(r2OffsetX + approachTarget) <= 1e-3) startImpact();
+                    if (Math.abs(r2OffsetX + approachTarget) <= 1e-3)
+                        startImpact();
                 }
                 return;
             }
             case IMPACT -> {
-                if (attackerIsP1 && p1Attacking) { a1Atks[curAtk1].update(dt); tAtk1 += dt; }
-                if (!attackerIsP1 && p2Attacking) { a2Atks[curAtk2].update(dt); tAtk2 += dt; }
+                if (attackerIsP1 && p1Attacking) {
+                    a1Atks[curAtk1].update(dt);
+                    tAtk1 += dt;
+                }
+                if (!attackerIsP1 && p2Attacking) {
+                    a2Atks[curAtk2].update(dt);
+                    tAtk2 += dt;
+                }
                 attackTimer += dt;
                 if (attackTimer >= (attackerIsP1 ? atkDur1 : atkDur2)) {
-                    if (attackerIsP1) { p1Attacking = false; } else { p2Attacking = false; }
+                    if (attackerIsP1) {
+                        p1Attacking = false;
+                    } else {
+                        p2Attacking = false;
+                    }
                     phase = Phase.RETURN;
                 }
                 tickDefendHurt(dt);
@@ -379,16 +419,19 @@ public class PixelBattleView {
                 if (attackerIsP1) {
                     anim1Run.update(dt);
                     r1OffsetX = clamp(r1OffsetX - RUN_SPEED * dt, 0, approachTarget);
-                    if (r1OffsetX <= 0) finishCinematic();
+                    if (r1OffsetX <= 0)
+                        finishCinematic();
                 } else {
                     anim2Run.update(dt);
                     r2OffsetX = clamp(r2OffsetX + RUN_SPEED * dt, -approachTarget, 0);
-                    if (r2OffsetX >= 0) finishCinematic();
+                    if (r2OffsetX >= 0)
+                        finishCinematic();
                 }
                 tickDefendHurt(dt);
                 return;
             }
-            case NONE -> { /* segue fluxo normal */ }
+            case NONE -> {
+                /* segue fluxo normal */ }
         }
 
         // Fluxo normal
@@ -397,7 +440,11 @@ public class PixelBattleView {
         if (p1Attacking) {
             a1Atks[curAtk1].update(dt);
             tAtk1 += dt;
-            if (tAtk1 >= atkDur1) { p1Attacking = false; a1Atks[curAtk1].reset(); curAtk1 = -1; }
+            if (tAtk1 >= atkDur1) {
+                p1Attacking = false;
+                a1Atks[curAtk1].reset();
+                curAtk1 = -1;
+            }
         } else {
             anim1Idle.update(dt);
         }
@@ -405,17 +452,41 @@ public class PixelBattleView {
         if (p2Attacking) {
             a2Atks[curAtk2].update(dt);
             tAtk2 += dt;
-            if (tAtk2 >= atkDur2) { p2Attacking = false; a2Atks[curAtk2].reset(); curAtk2 = -1; }
+            if (tAtk2 >= atkDur2) {
+                p2Attacking = false;
+                a2Atks[curAtk2].reset();
+                curAtk2 = -1;
+            }
         } else {
             anim2Idle.update(dt);
         }
     }
 
     private void tickDefendHurt(double dt) {
-        if (p1DefendPlaying) { anim1Defend.update(dt); tDef1 += dt; if (tDef1 >= durDef1) p1DefendPlaying = false; }
-        if (p2DefendPlaying) { anim2Defend.update(dt); tDef2 += dt; if (tDef2 >= durDef2) p2DefendPlaying = false; }
-        if (p1HurtPlaying)   { anim1Hurt.update(dt);   tHurt1 += dt; if (tHurt1 >= durHurt1) p1HurtPlaying = false; }
-        if (p2HurtPlaying)   { anim2Hurt.update(dt);   tHurt2 += dt; if (tHurt2 >= durHurt2) p2HurtPlaying = false; }
+        if (p1DefendPlaying) {
+            anim1Defend.update(dt);
+            tDef1 += dt;
+            if (tDef1 >= durDef1)
+                p1DefendPlaying = false;
+        }
+        if (p2DefendPlaying) {
+            anim2Defend.update(dt);
+            tDef2 += dt;
+            if (tDef2 >= durDef2)
+                p2DefendPlaying = false;
+        }
+        if (p1HurtPlaying) {
+            anim1Hurt.update(dt);
+            tHurt1 += dt;
+            if (tHurt1 >= durHurt1)
+                p1HurtPlaying = false;
+        }
+        if (p2HurtPlaying) {
+            anim2Hurt.update(dt);
+            tHurt2 += dt;
+            if (tHurt2 >= durHurt2)
+                p2HurtPlaying = false;
+        }
     }
 
     /** Executa o golpe no IMPACT, decide DEFEND/HURT e liga a anim de ataque. */
@@ -432,12 +503,14 @@ public class PixelBattleView {
         // Liga animação de ataque do atacante correto
         if (attackerIsP1) {
             curAtk1 = rng.nextInt(r1Atks.length);
-            p1Attacking = true; tAtk1 = 0;
+            p1Attacking = true;
+            tAtk1 = 0;
             atkDur1 = (double) r1Atks[curAtk1].columns() / fpsAtk1(curAtk1);
             a1Atks[curAtk1].reset();
         } else {
             curAtk2 = rng.nextInt(r2Atks.length);
-            p2Attacking = true; tAtk2 = 0;
+            p2Attacking = true;
+            tAtk2 = 0;
             atkDur2 = (double) r2Atks[curAtk2].columns() / fpsAtk2(curAtk2);
             a2Atks[curAtk2].reset();
         }
@@ -445,16 +518,34 @@ public class PixelBattleView {
         // Decide DEFEND/HURT (com base no snapshot antes/depois)
         var after = engine.snapshot();
         int enemyHpBefore = beforeSnap.enemyHp;
-        int enemyHpAfter  = after.enemyHp;
+        int enemyHpAfter = after.enemyHp;
         boolean enemyWasGuarding = beforeSnap.enemyGuarding;
         boolean tookDamage = enemyHpAfter < enemyHpBefore;
 
         if (attackerIsP1) {
-            if (enemyWasGuarding) { p2DefendPlaying = true; p2HurtPlaying = false; tDef2 = 0; anim2Defend.reset(); }
-            else if (tookDamage)  { p2HurtPlaying = true;   p2DefendPlaying = false; tHurt2 = 0; anim2Hurt.reset(); }
+            if (enemyWasGuarding) {
+                p2DefendPlaying = true;
+                p2HurtPlaying = false;
+                tDef2 = 0;
+                anim2Defend.reset();
+            } else if (tookDamage) {
+                p2HurtPlaying = true;
+                p2DefendPlaying = false;
+                tHurt2 = 0;
+                anim2Hurt.reset();
+            }
         } else {
-            if (enemyWasGuarding) { p1DefendPlaying = true; p1HurtPlaying = false; tDef1 = 0; anim1Defend.reset(); }
-            else if (tookDamage)  { p1HurtPlaying = true;   p1DefendPlaying = false; tHurt1 = 0; anim1Hurt.reset(); }
+            if (enemyWasGuarding) {
+                p1DefendPlaying = true;
+                p1HurtPlaying = false;
+                tDef1 = 0;
+                anim1Defend.reset();
+            } else if (tookDamage) {
+                p1HurtPlaying = true;
+                p1DefendPlaying = false;
+                tHurt1 = 0;
+                anim1Hurt.reset();
+            }
         }
 
         attackTimer = 0;
@@ -466,11 +557,12 @@ public class PixelBattleView {
         phase = Phase.NONE;
         pendingAction = null;
         beforeSnap = null;
-        r1OffsetX = 0; r2OffsetX = 0;
+        r1OffsetX = 0;
+        r2OffsetX = 0;
     }
 
     private void render() {
-        gc.clearRect(0,0,BASE_W,BASE_H);
+        gc.clearRect(0, 0, BASE_W, BASE_H);
         drawBackgroundCover(arena);
 
         var snap = engine.snapshot();
@@ -512,10 +604,10 @@ public class PixelBattleView {
         }
 
         // Tamanhos
-        int drawW1 = (int)Math.round(img1.getWidth()  * SPRITE_SCALE);
-        int drawH1 = (int)Math.round(img1.getHeight() * SPRITE_SCALE);
-        int drawW2 = (int)Math.round(img2.getWidth()  * SPRITE_SCALE);
-        int drawH2 = (int)Math.round(img2.getHeight() * SPRITE_SCALE);
+        int drawW1 = (int) Math.round(img1.getWidth() * SPRITE_SCALE);
+        int drawH1 = (int) Math.round(img1.getHeight() * SPRITE_SCALE);
+        int drawW2 = (int) Math.round(img2.getWidth() * SPRITE_SCALE);
+        int drawH2 = (int) Math.round(img2.getHeight() * SPRITE_SCALE);
 
         // Posições base
         int centerX = BASE_W / 2;
@@ -525,8 +617,8 @@ public class PixelBattleView {
         int r2y = R_Y - drawH2;
 
         // Aplica deslocamentos de corrida (px)
-        int x1 = (int)Math.round(r1x + r1OffsetX);
-        int x2 = (int)Math.round(r2x + r2OffsetX);
+        int x1 = (int) Math.round(r1x + r1OffsetX);
+        int x2 = (int) Math.round(r2x + r2OffsetX);
 
         // Desenho
         drawSprite(img1, x1, r1y, drawW1, drawH1, false);
@@ -559,27 +651,27 @@ public class PixelBattleView {
         int barW = 260, barH = 16;
 
         // bordas
-        gc.setFill(Color.color(0,0,0,0.6));
-        gc.fillRect(24, 24, barW+4, barH+4);
-        gc.fillRect(BASE_W - barW - 28, 24, barW+4, barH+4);
+        gc.setFill(Color.color(0, 0, 0, 0.6));
+        gc.fillRect(24, 24, barW + 4, barH + 4);
+        gc.fillRect(BASE_W - barW - 28, 24, barW + 4, barH + 4);
 
         // ESQUERDA (leftName)
         int leftHp, leftMax;
         if (s.currentName.equals(leftName)) {
-            leftHp  = s.currentHp;
+            leftHp = s.currentHp;
             leftMax = s.currentMaxHp;
         } else {
-            leftHp  = s.enemyHp;
+            leftHp = s.enemyHp;
             leftMax = s.enemyMaxHp;
         }
 
         // DIREITA (rightName)
         int rightHp, rightMax;
         if (s.currentName.equals(rightName)) {
-            rightHp  = s.currentHp;
+            rightHp = s.currentHp;
             rightMax = s.currentMaxHp;
         } else {
-            rightHp  = s.enemyHp;
+            rightHp = s.enemyHp;
             rightMax = s.enemyMaxHp;
         }
 
@@ -587,10 +679,10 @@ public class PixelBattleView {
         double r2 = Math.max(0, (double) rightHp / Math.max(1, rightMax));
 
         gc.setFill(Color.web("#2aff2a"));
-        gc.fillRect(26, 26, (int)(barW * r1), barH);
+        gc.fillRect(26, 26, (int) (barW * r1), barH);
 
         gc.setFill(Color.web("#ff3b3b"));
-        gc.fillRect(BASE_W - barW - 26, 26, (int)(barW * r2), barH);
+        gc.fillRect(BASE_W - barW - 26, 26, (int) (barW * r2), barH);
     }
 
     private void perform(Action a) {
@@ -611,16 +703,28 @@ public class PixelBattleView {
         approachTarget = Math.max(0, 2.0 * GAP - HIT_OVERLAP);
 
         // resets
-        if (attackerIsP1) { r1OffsetX = 0; anim1Run.reset(); }
-        else              { r2OffsetX = 0; anim2Run.reset(); }
+        if (attackerIsP1) {
+            r1OffsetX = 0;
+            anim1Run.reset();
+        } else {
+            r2OffsetX = 0;
+            anim2Run.reset();
+        }
 
-        p1Attacking = false; p2Attacking = false;
-        curAtk1 = -1; curAtk2 = -1;
+        p1Attacking = false;
+        p2Attacking = false;
+        curAtk1 = -1;
+        curAtk2 = -1;
         tAtk1 = tAtk2 = 0;
     }
 
-    private double fpsAtk1(int idx) { return atkFps1[Math.max(0, Math.min(idx, atkFps1.length-1))]; }
-    private double fpsAtk2(int idx) { return atkFps2[Math.max(0, Math.min(idx, atkFps2.length-1))]; }
+    private double fpsAtk1(int idx) {
+        return atkFps1[Math.max(0, Math.min(idx, atkFps1.length - 1))];
+    }
+
+    private double fpsAtk2(int idx) {
+        return atkFps2[Math.max(0, Math.min(idx, atkFps2.length - 1))];
+    }
 
     private void drawBackgroundCover(Image img) {
         double sw = img.getWidth(), sh = img.getHeight();
@@ -652,7 +756,7 @@ public class PixelBattleView {
             double baseS = Math.min((BASE_W * 0.70) / sw, (BASE_H * 0.60) / sh);
             // “pop” suavizado
             double pop = 0.82 + 0.18 * easeOutBack(victoryT);
-            double s   = baseS * pop;
+            double s = baseS * pop;
 
             double dw = sw * s;
             double dh = sh * s;
@@ -672,8 +776,10 @@ public class PixelBattleView {
                 double ty = dy + dh * 0.72; // ajuste vertical (área da faixa)
 
                 g.setGlobalAlpha(a);
-                g.setFill(Color.color(0,0,0,0.65)); g.fillText(winnerName, tx+3, ty+3);
-                g.setFill(Color.WHITE);              g.fillText(winnerName, tx,   ty);
+                g.setFill(Color.color(0, 0, 0, 0.65));
+                g.fillText(winnerName, tx + 3, ty + 3);
+                g.setFill(Color.WHITE);
+                g.fillText(winnerName, tx, ty);
                 g.setGlobalAlpha(1.0);
             }
         } else {
@@ -682,22 +788,23 @@ public class PixelBattleView {
             g.setFont(Font.font("Impact", 74));
             String t1 = "VITÓRIA!";
             double tw1 = textWidth(g, t1);
-            g.fillText(t1, (BASE_W - tw1)/2, BASE_H/2.0 - 10);
+            g.fillText(t1, (BASE_W - tw1) / 2, BASE_H / 2.0 - 10);
 
             g.setFont(Font.font("Impact", 56));
             double tw2 = textWidth(g, winnerName);
-            g.fillText(winnerName, (BASE_W - tw2)/2, BASE_H/2.0 + 56);
+            g.fillText(winnerName, (BASE_W - tw2) / 2, BASE_H / 2.0 + 56);
         }
     }
 
     // Helpers de easing
     private static double easeInOutQuad(double t) {
-        return (t < 0.5) ? (2*t*t) : (1 - Math.pow(-2*t + 2, 2)/2.0);
+        return (t < 0.5) ? (2 * t * t) : (1 - Math.pow(-2 * t + 2, 2) / 2.0);
     }
+
     private static double easeOutBack(double t) {
         double c1 = 1.70158;
         double c3 = c1 + 1;
-        return 1 + c3*Math.pow(t-1, 3) + c1*Math.pow(t-1, 2);
+        return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
     }
 
     // largura de string no Canvas (sem APIs internas)
@@ -716,4 +823,3 @@ public class PixelBattleView {
         }
     }
 }
-
