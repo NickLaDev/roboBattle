@@ -1,12 +1,12 @@
-package br.puc.robobattle.ui;
+package br.puc.battledolls.ui;
 
-import br.puc.robobattle.ai.CPURobotBuilder;
-import br.puc.robobattle.items.Armor;
-import br.puc.robobattle.items.Weapon;
-import br.puc.robobattle.model.Player;
-import br.puc.robobattle.model.Robot;
-import br.puc.robobattle.model.CharacterClass;
-import br.puc.robobattle.model.AbilityEffect;
+import br.puc.battledolls.ai.CPURobotBuilder;
+import br.puc.battledolls.items.Armor;
+import br.puc.battledolls.items.Weapon;
+import br.puc.battledolls.model.Player;
+import br.puc.battledolls.model.Robot;
+import br.puc.battledolls.model.CharacterClass;
+import br.puc.battledolls.model.AbilityEffect;
 import javafx.application.Application;
 import javafx.beans.property.ObjectProperty;
 import javafx.beans.property.IntegerProperty;

@@ -1,7 +1,7 @@
-package br.puc.robobattle.items;
+package br.puc.battledolls.items;
 
-import br.puc.robobattle.model.Equipment;
-import br.puc.robobattle.model.RobotStatsBuilder;
+import br.puc.battledolls.model.Equipment;
+import br.puc.battledolls.model.RobotStatsBuilder;
 
 public class Weapon implements Equipment {
     private final String name;

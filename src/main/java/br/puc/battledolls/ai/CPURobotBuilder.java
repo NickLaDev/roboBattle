@@ -1,10 +1,10 @@
-package br.puc.robobattle.ai;
+package br.puc.battledolls.ai;
 
-import br.puc.robobattle.items.Armor;
-import br.puc.robobattle.items.Module;
-import br.puc.robobattle.items.Weapon;
-import br.puc.robobattle.model.CharacterClass;
-import br.puc.robobattle.model.Robot;
+import br.puc.battledolls.items.Armor;
+import br.puc.battledolls.items.Module;
+import br.puc.battledolls.items.Weapon;
+import br.puc.battledolls.model.CharacterClass;
+import br.puc.battledolls.model.Robot;
 
 import java.util.Random;
 

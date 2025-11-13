@@ -1,8 +1,8 @@
-package br.puc.robobattle.model;
+package br.puc.battledolls.model;
 
-import br.puc.robobattle.items.Weapon;
-import br.puc.robobattle.items.Module;
-import br.puc.robobattle.items.Armor;
+import br.puc.battledolls.items.Weapon;
+import br.puc.battledolls.items.Module;
+import br.puc.battledolls.items.Armor;
 
 public class Robot {
     private final CharacterClass characterClass;

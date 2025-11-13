@@ -1,4 +1,4 @@
-package br.puc.robobattle.model;
+package br.puc.battledolls.model;
 
 /**
  * Define os efeitos da habilidade especial de um personagem.

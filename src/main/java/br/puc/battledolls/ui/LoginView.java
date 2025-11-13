@@ -1,4 +1,4 @@
-package br.puc.robobattle.ui;
+package br.puc.battledolls.ui;
 
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;

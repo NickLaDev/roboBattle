@@ -1,13 +1,13 @@
-package br.puc.robobattle;
+package br.puc.battledolls;
 
-import br.puc.robobattle.combat.BattleEngine;
-import br.puc.robobattle.items.Module;
-import br.puc.robobattle.items.Weapon;
-import br.puc.robobattle.items.Armor;
-import br.puc.robobattle.model.Player;
-import br.puc.robobattle.model.CharacterClass;
-import br.puc.robobattle.model.AbilityEffect;
-import br.puc.robobattle.model.Robot;
+import br.puc.battledolls.combat.BattleEngine;
+import br.puc.battledolls.items.Module;
+import br.puc.battledolls.items.Weapon;
+import br.puc.battledolls.items.Armor;
+import br.puc.battledolls.model.Player;
+import br.puc.battledolls.model.CharacterClass;
+import br.puc.battledolls.model.AbilityEffect;
+import br.puc.battledolls.model.Robot;
 
 import java.util.Scanner;
 

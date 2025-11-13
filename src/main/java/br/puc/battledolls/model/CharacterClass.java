@@ -1,4 +1,4 @@
-package br.puc.robobattle.model;
+package br.puc.battledolls.model;
 
 import java.util.function.Consumer;
 
@@ -52,7 +52,7 @@ public enum CharacterClass {
     SHINOBI(
             "Shinobi",
             "Assassino ágil que aposta em esquivas e veneno duradouro.",
-            "/assets/robots/Shinobi/Idle.png",
+            "/assets/characters/Shinobi/Idle.png",
             builder -> builder.addAtk(4).addEvade(0.08),
             new AbilityEffect(
                     "Lâminas Envenenadas",

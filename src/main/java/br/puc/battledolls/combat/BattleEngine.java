@@ -1,7 +1,7 @@
-package br.puc.robobattle.combat;
+package br.puc.battledolls.combat;
 
-import br.puc.robobattle.model.Player;
-import br.puc.robobattle.model.Robot;
+import br.puc.battledolls.model.Player;
+import br.puc.battledolls.model.Robot;
 
 import java.util.Random;
 import java.util.Scanner;

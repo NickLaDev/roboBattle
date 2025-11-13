@@ -1,4 +1,4 @@
-package br.puc.robobattle.model;
+package br.puc.battledolls.model;
 
 public final class RobotStats {
     public final int maxHp;

@@ -1,4 +1,4 @@
-package br.puc.robobattle.model;
+package br.puc.battledolls.model;
 
 public interface Equipment {
     String name();

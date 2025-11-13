@@ -1,7 +1,7 @@
-package br.puc.robobattle.ui;
+package br.puc.battledolls.ui;
 
-import br.puc.robobattle.ai.AIController;
-import br.puc.robobattle.combat.Action;
+import br.puc.battledolls.ai.AIController;
+import br.puc.battledolls.combat.Action;
 import javafx.animation.AnimationTimer;
 import javafx.animation.PauseTransition;
 import javafx.util.Duration;
@@ -157,20 +157,20 @@ public class PixelBattleView {
         victoryImg = safeLoad("/assets/ui/victory.png");
 
         // ===== Sprites =====
-        r1Idle = new SpriteSheet("/assets/robots/r1_idle.png", 6, 1);
-        r2Idle = new SpriteSheet("/assets/robots/r2_idle.png", 6, 1);
+        r1Idle = new SpriteSheet("/assets/characters/r1_idle.png", 6, 1);
+        r2Idle = new SpriteSheet("/assets/characters/r2_idle.png", 6, 1);
         anim1Idle = new SpriteAnimator(r1Idle.columns(), idleFps1);
         anim2Idle = new SpriteAnimator(r2Idle.columns(), idleFps2);
 
         r1Atks = new SpriteSheet[] {
-                new SpriteSheet("/assets/robots/r1_attack1.png", 4, 1),
-                new SpriteSheet("/assets/robots/r1_attack2.png", 4, 1),
-                new SpriteSheet("/assets/robots/r1_attack3.png", 4, 1)
+                new SpriteSheet("/assets/characters/r1_attack1.png", 4, 1),
+                new SpriteSheet("/assets/characters/r1_attack2.png", 4, 1),
+                new SpriteSheet("/assets/characters/r1_attack3.png", 4, 1)
         };
         r2Atks = new SpriteSheet[] {
-                new SpriteSheet("/assets/robots/r2_attack1.png", 4, 1),
-                new SpriteSheet("/assets/robots/r2_attack2.png", 4, 1),
-                new SpriteSheet("/assets/robots/r2_attack3.png", 4, 1)
+                new SpriteSheet("/assets/characters/r2_attack1.png", 4, 1),
+                new SpriteSheet("/assets/characters/r2_attack2.png", 4, 1),
+                new SpriteSheet("/assets/characters/r2_attack3.png", 4, 1)
         };
         a1Atks = new SpriteAnimator[] {
                 new SpriteAnimator(r1Atks[0].columns(), atkFps1[0]),
@@ -183,27 +183,27 @@ public class PixelBattleView {
                 new SpriteAnimator(r2Atks[2].columns(), atkFps2[2])
         };
 
-        r1Run = new SpriteSheet("/assets/robots/r1_run.png", 8, 1);
-        r2Run = new SpriteSheet("/assets/robots/r2_run.png", 8, 1);
+        r1Run = new SpriteSheet("/assets/characters/r1_run.png", 8, 1);
+        r2Run = new SpriteSheet("/assets/characters/r2_run.png", 8, 1);
         anim1Run = new SpriteAnimator(r1Run.columns(), runFps1);
         anim2Run = new SpriteAnimator(r2Run.columns(), runFps2);
 
-        r1Defend = new SpriteSheet("/assets/robots/r1_defend.png", 2, 1);
-        r2Defend = new SpriteSheet("/assets/robots/r2_defend.png", 2, 1);
+        r1Defend = new SpriteSheet("/assets/characters/r1_defend.png", 2, 1);
+        r2Defend = new SpriteSheet("/assets/characters/r2_defend.png", 2, 1);
         anim1Defend = new SpriteAnimator(r1Defend.columns(), defendFps1);
         anim2Defend = new SpriteAnimator(r2Defend.columns(), defendFps2);
         durDef1 = r1Defend.columns() / defendFps1;
         durDef2 = r2Defend.columns() / defendFps2;
 
-        r1Hurt = new SpriteSheet("/assets/robots/r1_hurt.png", 3, 1);
-        r2Hurt = new SpriteSheet("/assets/robots/r2_hurt.png", 3, 1);
+        r1Hurt = new SpriteSheet("/assets/characters/r1_hurt.png", 3, 1);
+        r2Hurt = new SpriteSheet("/assets/characters/r2_hurt.png", 3, 1);
         anim1Hurt = new SpriteAnimator(r1Hurt.columns(), hurtFps1);
         anim2Hurt = new SpriteAnimator(r2Hurt.columns(), hurtFps2);
         durHurt1 = r1Hurt.columns() / hurtFps1;
         durHurt2 = r2Hurt.columns() / hurtFps2;
 
-        r1Death = new SpriteSheet("/assets/robots/r1_death.png", 3, 1);
-        r2Death = new SpriteSheet("/assets/robots/r2_death.png", 3, 1);
+        r1Death = new SpriteSheet("/assets/characters/r1_death.png", 3, 1);
+        r2Death = new SpriteSheet("/assets/characters/r2_death.png", 3, 1);
         anim1Death = new SpriteAnimator(r1Death.columns(), deathFps1);
         anim2Death = new SpriteAnimator(r2Death.columns(), deathFps2);
         durDeath1 = r1Death.columns() / deathFps1;
@@ -333,8 +333,8 @@ public class PixelBattleView {
         delay.setOnFinished(e -> {
             // Obtém os jogadores do engine
             // No modo PvC, p2 é sempre a CPU e p1 é sempre humano
-            br.puc.robobattle.model.Player cpuPlayer = engine.getCurrentPlayer();
-            br.puc.robobattle.model.Player humanPlayer = engine.getEnemyPlayer();
+            br.puc.battledolls.model.Player cpuPlayer = engine.getCurrentPlayer();
+            br.puc.battledolls.model.Player humanPlayer = engine.getEnemyPlayer();
             
             // Escolhe ação usando a IA
             Action aiAction = aiController.chooseAction(cpuPlayer, humanPlayer);

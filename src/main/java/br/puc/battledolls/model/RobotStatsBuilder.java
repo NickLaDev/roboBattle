@@ -1,4 +1,4 @@
-package br.puc.robobattle.model;
+package br.puc.battledolls.model;
 
 public class RobotStatsBuilder {
     private int hp = 100, atk = 10, def = 5;

@@ -1,8 +1,8 @@
-package br.puc.robobattle.ai;
+package br.puc.battledolls.ai;
 
-import br.puc.robobattle.combat.Action;
-import br.puc.robobattle.model.Player;
-import br.puc.robobattle.model.Robot;
+import br.puc.battledolls.combat.Action;
+import br.puc.battledolls.model.Player;
+import br.puc.battledolls.model.Robot;
 
 import java.util.Random;
 

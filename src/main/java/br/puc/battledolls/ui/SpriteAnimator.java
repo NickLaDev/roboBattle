@@ -1,4 +1,4 @@
-package br.puc.robobattle.ui;
+package br.puc.battledolls.ui;
 
 public class SpriteAnimator {
     private final int frames;

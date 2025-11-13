@@ -4,7 +4,7 @@ plugins {
     id("org.openjfx.javafxplugin") version "0.1.0"
 }
 
-group = "br.puc.robobattle"
+group = "br.puc.battledolls"
 version = "1.0-SNAPSHOT"
 
 repositories {
@@ -32,5 +32,5 @@ javafx {
 }
 
 application {
-    mainClass.set("br.puc.robobattle.ui.GameFX")
+    mainClass.set("br.puc.battledolls.ui.GameFX")
 }

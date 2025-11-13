@@ -1,9 +1,9 @@
-package br.puc.robobattle.ui;
+package br.puc.battledolls.ui;
 
-import br.puc.robobattle.combat.Action;
-import br.puc.robobattle.combat.DamageCalculator;
-import br.puc.robobattle.combat.DamageResult;
-import br.puc.robobattle.model.Player;
+import br.puc.battledolls.combat.Action;
+import br.puc.battledolls.combat.DamageCalculator;
+import br.puc.battledolls.combat.DamageResult;
+import br.puc.battledolls.model.Player;
 
 import java.util.ArrayList;
 import java.util.List;

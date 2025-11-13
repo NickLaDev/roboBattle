@@ -1,4 +1,4 @@
-package br.puc.robobattle.ui;
+package br.puc.battledolls.ui;
 
 import javafx.scene.image.Image;
 import javafx.scene.image.PixelReader;
@@ -20,7 +20,7 @@ public class SpriteSheet {
     private final int columns, rows;
 
     /**
-     * @param resourcePath caminho no classpath (ex.: "/assets/robots/r1_idle.png")
+     * @param resourcePath caminho no classpath (ex.: "/assets/characters/r1_idle.png")
      * @param columns número de colunas (ex.: 4 frames na horizontal → 4)
      * @param rows número de linhas (ex.: 1 linha → 1)
      */

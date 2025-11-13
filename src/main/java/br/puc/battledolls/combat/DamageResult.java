@@ -1,4 +1,4 @@
-package br.puc.robobattle.combat;
+package br.puc.battledolls.combat;
 
 public class DamageResult {
     public final int rolledAttack;

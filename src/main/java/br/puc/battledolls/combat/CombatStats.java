@@ -1,4 +1,4 @@
-package br.puc.robobattle.combat;
+package br.puc.battledolls.combat;
 
 public class CombatStats {
     public int rounds = 0;

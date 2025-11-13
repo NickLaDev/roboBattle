@@ -1,4 +1,4 @@
-package br.puc.robobattle.combat;
+package br.puc.battledolls.combat;
 
 public enum Action {
     ATTACK, DEFEND, SPECIAL
