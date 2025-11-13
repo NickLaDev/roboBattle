@@ -1,6 +1,6 @@
 package br.puc.battledolls.ui;
 
-import br.puc.battledolls.ai.CPURobotBuilder;
+import br.puc.battledolls.campaign.CampaignManager;
 import br.puc.battledolls.items.Armor;
 import br.puc.battledolls.items.Weapon;
 import br.puc.battledolls.model.Player;
@@ -63,6 +63,7 @@ public class GameFX extends Application {
     private Player p1, p2;
     private Purchase pur1, pur2;
     private UiBattleEngine engine;
+    private CampaignManager campaignManager; // Gerencia a campanha PvC
 
     public static class Purchase {
         public final Robot robot;
@@ -356,12 +357,28 @@ public class GameFX extends Application {
     // 2) LOJA (ancrada no fundo + responsiva + UI polida)
     // =========================================================
     private void showShopScreen(Player player, boolean isFirstPlayer) {
+        showShopScreen(player, isFirstPlayer, false);
+    }
+
+    private void showShopScreen(Player player, boolean isFirstPlayer, boolean isUpgrade) {
         final int credits = player.credits();
 
         // seleção
         ObjectProperty<CharacterClass> characterPick = new SimpleObjectProperty<>(CharacterClass.BEATRIZ);
-        IntegerProperty weaponLvl = new SimpleIntegerProperty(0);
-        IntegerProperty armorLvl = new SimpleIntegerProperty(0);
+        // Se for upgrade, inicializa com os níveis atuais do jogador
+        int currentWeaponLvl = 0;
+        int currentArmorLvl = 0;
+        if (isUpgrade && player.robot() != null) {
+            // Estima os níveis baseado nas stats (aproximação)
+            var stats = player.robot().stats();
+            // Arma: ATK base é 10, cada nível adiciona 6, então (atk - 10) / 6
+            currentWeaponLvl = Math.max(0, Math.min(5, (stats.atk - 10) / 6));
+            // Armadura: DEF base é 5, cada nível adiciona 4, então (def - 5) / 4
+            currentArmorLvl = Math.max(0, Math.min(5, (stats.def - 5) / 4));
+            characterPick.set(player.robot().characterClass());
+        }
+        IntegerProperty weaponLvl = new SimpleIntegerProperty(currentWeaponLvl);
+        IntegerProperty armorLvl = new SimpleIntegerProperty(currentArmorLvl);
 
         // custo real pelas classes
         IntUnaryOperator weaponCost = lvl -> (lvl <= 0) ? 0 : new Weapon("N" + lvl, lvl).getCost();
@@ -381,7 +398,16 @@ public class GameFX extends Application {
                 BackgroundPosition.CENTER, new BackgroundSize(IMG_W, IMG_H, false, false, false, false))));
 
         // ====== seleção de personagem ======
+        // Se for upgrade, usa o personagem atual do jogador
+        if (isUpgrade && player.robot() != null) {
+            characterPick.set(player.robot().characterClass());
+        }
         VBox characterCard = buildCharacterSelector(characterPick);
+        // Se for upgrade, desabilita a seleção de personagem
+        if (isUpgrade) {
+            characterCard.setDisable(true);
+            characterCard.setOpacity(0.7);
+        }
 
         // ====== strips (com preço no tile) ======
         StripControl swords = itemStrip(
@@ -405,36 +431,70 @@ public class GameFX extends Application {
         Label abilityName = new Label();
         abilityName.setTextFill(Color.web("#EDE9FE"));
         abilityName.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+        abilityName.setWrapText(true);
+        abilityName.setMaxWidth(180);
+
         Label abilityDesc = new Label();
         abilityDesc.setTextFill(Color.web("#EDE9FE"));
         abilityDesc.setWrapText(true);
+        abilityDesc.setMaxWidth(180);
         abilityDesc.setStyle("-fx-font-size: 12px;");
 
         VBox abilityBox = new VBox(4, abilityName, abilityDesc);
         abilityBox.setAlignment(Pos.TOP_LEFT);
+        abilityBox.setPrefWidth(180);
         VBox abilityCard = translucentCard("Habilidade especial", abilityBox);
+        abilityCard.setPrefWidth(200);
+        abilityCard.setMinWidth(200);
 
-        HBox previews = new HBox(24,
-                translucentCard("Arma escolhida", swordPreview),
-                translucentCard("Escudo escolhido", shieldPreview),
-                abilityCard);
+        VBox swordCard = translucentCard("Arma escolhida", swordPreview);
+        swordCard.setPrefWidth(140);
+        swordCard.setMinWidth(140);
+
+        VBox shieldCard = translucentCard("Escudo escolhido", shieldPreview);
+        shieldCard.setPrefWidth(150);
+        shieldCard.setMinWidth(150);
+
+        HBox previews = new HBox(20, swordCard, shieldCard, abilityCard);
         previews.setAlignment(Pos.CENTER);
 
         // ====== barra inferior ======
         Label lblCred = bold("Créditos: " + credits);
-        Label lblSubtotal = new Label("Subtotal: 0");
-        Label lblSaldo = new Label("Saldo pós-compra: " + credits);
+        lblCred.setMinWidth(120);
         lblCred.setTextFill(Color.web("#EDE9FE"));
+
+        Label lblSubtotal = new Label("Subtotal: 0");
+        lblSubtotal.setMinWidth(120);
         lblSubtotal.setTextFill(Color.web("#EDE9FE"));
+
+        Label lblSaldo = new Label("Saldo pós-compra: " + credits);
+        lblSaldo.setMinWidth(180);
         lblSaldo.setTextFill(Color.web("#EDE9FE"));
 
         Button btnPreview = primaryButton("Pré-visualizar");
-        Button btnConfirm = primaryButton("Confirmar compra");
+        Button btnConfirm = primaryButton(isUpgrade ? "Confirmar Upgrade" : "Confirmar compra");
+
+        // Adiciona label mostrando fase atual se for upgrade
+        Label phaseLabel = null;
+        if (isUpgrade && campaignManager != null) {
+            var currentPhase = campaignManager.getCurrentPhase();
+            if (currentPhase != null) {
+                phaseLabel = new Label(String.format("Fase %d/%d - Próximo: %s",
+                        campaignManager.getCurrentPhaseNumber(),
+                        campaignManager.getTotalPhases(),
+                        currentPhase.cpuCharacter().name()));
+                phaseLabel.setTextFill(Color.web("#BB86FC"));
+                phaseLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
+                phaseLabel.setMinWidth(250);
+            }
+        }
 
         Label lblAbility = new Label();
         lblAbility.setTextFill(Color.web("#EDE9FE"));
+        lblAbility.setMinWidth(200);
 
-        HBox bottom = new HBox(16, btnPreview, new Region(), lblCred, lblSubtotal, lblSaldo, lblAbility, btnConfirm);
+        HBox bottom = new HBox(16, btnPreview, new Region(), lblCred, lblSubtotal, lblSaldo,
+                phaseLabel != null ? phaseLabel : lblAbility, btnConfirm);
         HBox.setHgrow(bottom.getChildren().get(1), Priority.ALWAYS);
         bottom.setAlignment(Pos.CENTER_LEFT);
         bottom.setPadding(new Insets(10));
@@ -444,15 +504,16 @@ public class GameFX extends Application {
         centerBox.setAlignment(Pos.CENTER);
 
         // ====== adicionar no "board" e posicionar por porcentagem do fundo ======
-        // regiões pensadas para casar com os nichos da sua arte:
-        // esquerda: x=6.5% y=18% w=30% h=56%
-        // direita: x=63.5% y=18% w=30% h=56%
-        // centro-inf: x=25% y=76% w=50% h=18%
+        // Layout reorganizado:
+        // Personagem no topo centro: x=30% y=3% w=40% (mais espaço)
+        // Espadas esquerda: x=3% y=26% w=26% h=48%
+        // Escudos direita: x=71% y=26% w=26% h=48%
+        // Centro inferior (previews + bottom): x=20% y=76% w=60% h=20%
         board.getChildren().addAll(characterCard, swords.node, shields.node, centerBox);
-        placePct(characterCard, 0.25, 0.05, 0.50, 0.18, IMG_W, IMG_H);
-        placePct(swords.node, 0.065, 0.26, 0.30, 0.48, IMG_W, IMG_H);
-        placePct(shields.node, 0.635, 0.26, 0.30, 0.48, IMG_W, IMG_H);
-        placePct(centerBox, 0.250, 0.76, 0.50, 0.20, IMG_W, IMG_H);
+        placePct(characterCard, 0.30, 0.03, 0.40, 0.20, IMG_W, IMG_H);
+        placePct(swords.node, 0.03, 0.26, 0.26, 0.48, IMG_W, IMG_H);
+        placePct(shields.node, 0.71, 0.26, 0.26, 0.48, IMG_W, IMG_H);
+        placePct(centerBox, 0.20, 0.76, 0.60, 0.20, IMG_W, IMG_H);
 
         // ====== lógica do resumo ======
         Runnable refreshSummary = () -> {
@@ -499,12 +560,19 @@ public class GameFX extends Application {
                 alert("Falha ao equipar. Tente novamente.");
                 return;
             }
+
+            // Se for upgrade, vai para a próxima fase
+            if (isUpgrade) {
+                startCampaignPhase();
+                return;
+            }
+
             if (isFirstPlayer) {
                 pur1 = p;
-                // No modo PvC, pula a loja do jogador 2 e gera robô automaticamente
+                // No modo PvC, inicia a campanha
                 if (gameMode == GameMode.PVC) {
-                    generateCPURobot();
-                    showBattleScreen();
+                    campaignManager = new CampaignManager(p1);
+                    startCampaignPhase();
                 } else {
                     showShopScreen(p2, false);
                 }
@@ -542,21 +610,167 @@ public class GameFX extends Application {
     }
 
     // =========================================================
-    // 3) BATALHA
+    // 3) CAMPANHA PvC
     // =========================================================
-    private void generateCPURobot() {
-        // Gera robô automaticamente para a CPU
-        CPURobotBuilder builder = new CPURobotBuilder();
-        Robot cpuRobot = builder.buildRobot(START_CREDITS);
-        // Equipa o robô na CPU sem descontar créditos (CPU tem créditos ilimitados)
-        p2.buyAndEquip(cpuRobot, 0);
-        // Cria um Purchase para manter compatibilidade
-        pur2 = new Purchase(cpuRobot.characterClass(), cpuRobot, 0);
+    /**
+     * Inicia uma fase da campanha.
+     */
+    private void startCampaignPhase() {
+        if (campaignManager == null || campaignManager.isCampaignComplete()) {
+            // Campanha completa - mostrar tela de vitória
+            showCampaignCompleteScreen();
+            return;
+        }
+
+        // Cria o jogador CPU para esta fase
+        p2 = campaignManager.createCPUPlayer();
+        if (p2 == null) {
+            showCampaignCompleteScreen();
+            return;
+        }
+
+        // Mostra a batalha
+        showBattleScreen(true);
     }
 
+    /**
+     * Chamado quando uma batalha da campanha termina.
+     */
+    public void onCampaignBattleFinished(boolean playerWon) {
+        campaignManager.advanceToNextPhase(playerWon);
+
+        if (!playerWon) {
+            // Jogador perdeu - mostrar tela de game over
+            showGameOverScreen();
+        } else if (campaignManager.isCampaignComplete()) {
+            // Campanha completa
+            showCampaignCompleteScreen();
+        } else {
+            // Próxima fase - mostrar tela de upgrade
+            showUpgradeScreen();
+        }
+    }
+
+    /**
+     * Tela de upgrade entre fases.
+     */
+    private void showUpgradeScreen() {
+        // Reutiliza a tela de loja, mas com título diferente e sem permitir trocar
+        // personagem
+        showShopScreen(p1, false, true);
+    }
+
+    /**
+     * Tela de vitória da campanha.
+     */
+    private void showCampaignCompleteScreen() {
+        Image bg = load(SELECTION_BG);
+        final double IMG_W = bg.getWidth();
+        final double IMG_H = bg.getHeight();
+
+        Pane board = new Pane();
+        board.setPrefSize(IMG_W, IMG_H);
+        board.setBackground(new Background(new BackgroundImage(
+                bg, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER, new BackgroundSize(IMG_W, IMG_H, false, false, false, false))));
+
+        Label title = new Label("CAMPANHA COMPLETA!");
+        title.setTextFill(Color.web("#BB86FC"));
+        title.setStyle("""
+                    -fx-font-family: "Georgia", "Times New Roman", serif;
+                    -fx-font-size: 48px;
+                    -fx-font-weight: bold;
+                """);
+        DropShadow titleGlow = new DropShadow(40, Color.web("#BB86FC"));
+        titleGlow.setSpread(0.3);
+        title.setEffect(titleGlow);
+        title.setLayoutX((IMG_W - 600) / 2);
+        title.setLayoutY(IMG_H * 0.3);
+
+        Label creditsLabel = new Label("Créditos Totais Ganhos: " + campaignManager.getTotalCreditsEarned());
+        creditsLabel.setTextFill(Color.web("#EDE9FE"));
+        creditsLabel.setStyle("-fx-font-size: 24px;");
+        creditsLabel.setLayoutX((IMG_W - 500) / 2);
+        creditsLabel.setLayoutY(IMG_H * 0.5);
+
+        Button btnMenu = createModeButton("VOLTAR AO MENU", "#60a5fa");
+        btnMenu.setPrefWidth(300);
+        btnMenu.setPrefHeight(50);
+        btnMenu.setLayoutX((IMG_W - 300) / 2);
+        btnMenu.setLayoutY(IMG_H * 0.7);
+        btnMenu.setOnAction(e -> showModeSelectionScreen());
+
+        board.getChildren().addAll(title, creditsLabel, btnMenu);
+
+        StackPane root = new StackPane(board);
+        root.setStyle("-fx-background-color: black;");
+        Scene scene = new Scene(root, 1280, 720);
+        stage.setScene(scene);
+    }
+
+    /**
+     * Tela de game over.
+     */
+    private void showGameOverScreen() {
+        Image bg = load(SELECTION_BG);
+        final double IMG_W = bg.getWidth();
+        final double IMG_H = bg.getHeight();
+
+        Pane board = new Pane();
+        board.setPrefSize(IMG_W, IMG_H);
+        board.setBackground(new Background(new BackgroundImage(
+                bg, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER, new BackgroundSize(IMG_W, IMG_H, false, false, false, false))));
+
+        Label title = new Label("GAME OVER");
+        title.setTextFill(Color.web("#F87171"));
+        title.setStyle("""
+                    -fx-font-family: "Georgia", "Times New Roman", serif;
+                    -fx-font-size: 48px;
+                    -fx-font-weight: bold;
+                """);
+        DropShadow titleGlow = new DropShadow(40, Color.web("#F87171"));
+        titleGlow.setSpread(0.3);
+        title.setEffect(titleGlow);
+        title.setLayoutX((IMG_W - 400) / 2);
+        title.setLayoutY(IMG_H * 0.4);
+
+        Button btnMenu = createModeButton("VOLTAR AO MENU", "#60a5fa");
+        btnMenu.setPrefWidth(300);
+        btnMenu.setPrefHeight(50);
+        btnMenu.setLayoutX((IMG_W - 300) / 2);
+        btnMenu.setLayoutY(IMG_H * 0.6);
+        btnMenu.setOnAction(e -> showModeSelectionScreen());
+
+        board.getChildren().addAll(title, btnMenu);
+
+        StackPane root = new StackPane(board);
+        root.setStyle("-fx-background-color: black;");
+        Scene scene = new Scene(root, 1280, 720);
+        stage.setScene(scene);
+    }
+
+    // =========================================================
+    // 4) BATALHA (PvP ou PvC)
+    // =========================================================
     private void showBattleScreen() {
+        showBattleScreen(false);
+    }
+
+    private void showBattleScreen(boolean isCampaign) {
         engine = new UiBattleEngine(p1, p2, gameMode == GameMode.PVC);
-        PixelBattleView pixelView = new PixelBattleView(engine, gameMode == GameMode.PVC);
+        // Se for campanha, passa o caminho dos sprites da CPU e a configuração de frames
+        String cpuSpritePath = null;
+        br.puc.battledolls.campaign.CPUCharacter.SpriteFrameConfig cpuFrameConfig = null;
+        if (isCampaign && campaignManager != null) {
+            var phase = campaignManager.getCurrentPhase();
+            if (phase != null) {
+                cpuSpritePath = phase.cpuCharacter().spritePath();
+                cpuFrameConfig = phase.cpuCharacter().frameConfig();
+            }
+        }
+        PixelBattleView pixelView = new PixelBattleView(engine, gameMode == GameMode.PVC,
+                isCampaign ? this : null, cpuSpritePath, cpuFrameConfig);
         Scene battleScene = pixelView.buildScene();
         stage.setScene(battleScene);
     }
@@ -572,41 +786,50 @@ public class GameFX extends Application {
 
     private Button primaryButton(String text) {
         Button b = new Button(text);
+        b.setMinWidth(170);
+        b.setPrefWidth(Region.USE_COMPUTED_SIZE);
+        b.setWrapText(true);
         b.setStyle("""
                     -fx-font-weight: bold;
                     -fx-text-fill: white;
                     -fx-background-color: linear-gradient(#6D28D9, #4C1D95);
                     -fx-background-radius: 12;
-                    -fx-padding: 8 14 8 14;
+                    -fx-padding: 8 16 8 16;
                     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 10, 0.3, 0, 2);
                     -fx-cursor: hand;
+                    -fx-font-size: 13px;
                 """);
         b.setOnMouseEntered(ev -> b.setStyle("""
                     -fx-font-weight: bold;
                     -fx-text-fill: white;
                     -fx-background-color: linear-gradient(#7C3AED, #5B21B6);
                     -fx-background-radius: 12;
-                    -fx-padding: 8 14 8 14;
+                    -fx-padding: 8 16 8 16;
                     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.55), 12, 0.35, 0, 3);
                     -fx-cursor: hand;
+                    -fx-font-size: 13px;
                 """));
         b.setOnMouseExited(ev -> b.setStyle("""
                     -fx-font-weight: bold;
                     -fx-text-fill: white;
                     -fx-background-color: linear-gradient(#6D28D9, #4C1D95);
                     -fx-background-radius: 12;
-                    -fx-padding: 8 14 8 14;
+                    -fx-padding: 8 16 8 16;
                     -fx-effect: dropshadow(gaussian, rgba(0,0,0,0.45), 10, 0.3, 0, 2);
                     -fx-cursor: hand;
+                    -fx-font-size: 13px;
                 """));
         return b;
     }
 
     private VBox translucentCard(String title, Node content) {
         Label t = new Label(title);
-        t.setStyle("-fx-font-weight: bold; -fx-text-fill: #EDE9FE;");
+        t.setStyle("-fx-font-weight: bold; -fx-text-fill: #EDE9FE; -fx-font-size: 13px;");
+        t.setWrapText(true);
+        t.setMaxWidth(Double.MAX_VALUE);
         VBox box = new VBox(8, t, content);
         box.setPadding(new Insets(12));
+        box.setAlignment(Pos.TOP_CENTER);
         box.setStyle("""
                     -fx-background-color: rgba(0,0,0,0.38);
                     -fx-background-radius: 14;
@@ -616,19 +839,53 @@ public class GameFX extends Application {
     }
 
     private VBox buildCharacterSelector(ObjectProperty<CharacterClass> selected) {
+        // Título da seção
+        Label titleLabel = new Label("ESCOLHA SEU PERSONAGEM");
+        titleLabel.setTextFill(Color.web("#BB86FC"));
+        titleLabel.setStyle("""
+                    -fx-font-family: "Georgia", "Times New Roman", serif;
+                    -fx-font-size: 24px;
+                    -fx-font-weight: bold;
+                    -fx-padding: 0 0 15 0;
+                """);
+        DropShadow titleGlow = new DropShadow(25, Color.web("#BB86FC"));
+        titleGlow.setSpread(0.4);
+        titleLabel.setEffect(titleGlow);
+
+        // ComboBox estilizado
         ComboBox<CharacterClass> combo = new ComboBox<>();
         combo.getItems().addAll(CharacterClass.values());
+        combo.setPrefWidth(400);
+        combo.setStyle("""
+                    -fx-background-color: linear-gradient(to bottom, rgba(88,28,135,0.6), rgba(55,16,85,0.6));
+                    -fx-background-radius: 12;
+                    -fx-border-color: #A78BFA;
+                    -fx-border-width: 2;
+                    -fx-border-radius: 12;
+                    -fx-font-size: 16px;
+                    -fx-text-fill: #EDE9FE;
+                    -fx-prompt-text-fill: #EDE9FE;
+                """);
+
         combo.setCellFactory(list -> new ListCell<>() {
             @Override
             protected void updateItem(CharacterClass item, boolean empty) {
                 super.updateItem(item, empty);
                 if (empty || item == null) {
                     setText(null);
+                    setStyle("");
                 } else {
                     setText(item.displayName() + " — " + item.ability().name());
+                    setStyle("""
+                            -fx-background-color: rgba(30,30,40,0.95);
+                            -fx-text-fill: #EDE9FE;
+                            -fx-padding: 8 12 8 12;
+                            -fx-font-size: 14px;
+                        """);
                 }
             }
         });
+
         combo.setButtonCell(new ListCell<>() {
             @Override
             protected void updateItem(CharacterClass item, boolean empty) {
@@ -636,7 +893,8 @@ public class GameFX extends Application {
                 if (empty || item == null) {
                     setText(null);
                 } else {
-                    setText(item.displayName() + " — " + item.ability().name());
+                    setText(item.displayName());
+                    setStyle("-fx-text-fill: #EDE9FE; -fx-font-size: 16px; -fx-font-weight: bold;");
                 }
             }
         });
@@ -646,15 +904,51 @@ public class GameFX extends Application {
         }
         combo.setValue(selected.get());
 
+        // Imagem do personagem - MUITO MAIOR e com efeitos
         ImageView portrait = new ImageView();
-        portrait.setFitWidth(140);
-        portrait.setFitHeight(140);
+        portrait.setFitWidth(320);
+        portrait.setFitHeight(320);
         portrait.setPreserveRatio(true);
 
+        // Efeito de brilho na imagem
+        DropShadow portraitGlow = new DropShadow(35, Color.web("#A78BFA"));
+        portraitGlow.setSpread(0.3);
+        portrait.setEffect(portraitGlow);
+
+        // Container para a imagem com borda brilhante
+        StackPane portraitContainer = new StackPane(portrait);
+        portraitContainer.setStyle("""
+                    -fx-background-color: linear-gradient(to bottom right, rgba(167,139,250,0.15), rgba(88,28,135,0.15));
+                    -fx-background-radius: 20;
+                    -fx-border-color: linear-gradient(to bottom right, #BB86FC, #A78BFA);
+                    -fx-border-width: 3;
+                    -fx-border-radius: 20;
+                    -fx-padding: 20;
+                """);
+        portraitContainer.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+
+        // Nome da habilidade - destacado
+        Label abilityLabel = new Label();
+        abilityLabel.setTextFill(Color.web("#BB86FC"));
+        abilityLabel.setAlignment(Pos.CENTER);
+        abilityLabel.setStyle("""
+                    -fx-font-size: 18px;
+                    -fx-font-weight: bold;
+                    -fx-padding: 10 0 5 0;
+                """);
+
+        // Descrição do personagem - melhorada
         Label desc = new Label();
         desc.setWrapText(true);
         desc.setTextFill(Color.web("#EDE9FE"));
-        desc.setStyle("-fx-font-size: 12px;");
+        desc.setAlignment(Pos.CENTER);
+        desc.setMaxWidth(Double.MAX_VALUE);
+        desc.setPrefWidth(380);
+        desc.setStyle("""
+                    -fx-font-size: 13px;
+                    -fx-line-spacing: 2;
+                    -fx-padding: 0 15 0 15;
+                """);
 
         Runnable refresh = () -> {
             CharacterClass cc = selected.get();
@@ -662,6 +956,7 @@ public class GameFX extends Application {
                 return;
             if (combo.getValue() != cc)
                 combo.setValue(cc);
+            abilityLabel.setText("Habilidade: " + cc.ability().name());
             desc.setText(cc.description());
             try {
                 portrait.setImage(load(cc.portraitPath()));
@@ -677,13 +972,27 @@ public class GameFX extends Application {
         selected.addListener((obs, old, val) -> refresh.run());
         refresh.run();
 
-        VBox content = new VBox(10, combo, portrait, desc);
+        // Layout vertical melhorado
+        VBox content = new VBox(15, titleLabel, combo, portraitContainer, abilityLabel, desc);
         content.setAlignment(Pos.TOP_CENTER);
         content.setFillWidth(true);
+        content.setStyle("""
+                    -fx-background-color: linear-gradient(to bottom, rgba(0,0,0,0.5), rgba(30,20,40,0.6));
+                    -fx-background-radius: 20;
+                    -fx-border-color: rgba(187,134,252,0.4);
+                    -fx-border-width: 2;
+                    -fx-border-radius: 20;
+                    -fx-padding: 25;
+                """);
 
-        VBox card = translucentCard("Personagem", content);
-        card.setPrefWidth(360);
-        return card;
+        // Efeito de sombra externa no card inteiro
+        DropShadow cardShadow = new DropShadow(40, Color.web("#000000"));
+        cardShadow.setSpread(0.2);
+        content.setEffect(cardShadow);
+
+        VBox wrapper = new VBox(content);
+        wrapper.setAlignment(Pos.TOP_CENTER);
+        return wrapper;
     }
 
     private ImageView bigPreview() {

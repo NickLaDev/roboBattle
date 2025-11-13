@@ -25,6 +25,17 @@ public class SpriteSheet {
      * @param rows número de linhas (ex.: 1 linha → 1)
      */
     public SpriteSheet(String resourcePath, int columns, int rows) {
+        this(resourcePath, columns, rows, -1, -1);
+    }
+    
+    /**
+     * @param resourcePath caminho no classpath (ex.: "/assets/characters/r1_idle.png")
+     * @param columns número de colunas (ex.: 4 frames na horizontal → 4)
+     * @param rows número de linhas (ex.: 1 linha → 1)
+     * @param frameWidth largura fixa do frame em pixels (se <= 0, calcula automaticamente)
+     * @param frameHeight altura fixa do frame em pixels (se <= 0, calcula automaticamente)
+     */
+    public SpriteSheet(String resourcePath, int columns, int rows, int frameWidth, int frameHeight) {
         this.columns = columns;
         this.rows = rows;
 
@@ -42,9 +53,15 @@ public class SpriteSheet {
         // Remove fundo pintado (xadrez/cores sólidas) caso haja – vira alpha=0
         this.sheet = stripBackground(raw);
 
-        // Calcula tamanho do frame automaticamente
-        this.frameW = (int) Math.round(sheet.getWidth() / columns);
-        this.frameH = (int) Math.round(sheet.getHeight() / rows);
+        // Usa tamanho fixo se fornecido, senão calcula automaticamente
+        if (frameWidth > 0 && frameHeight > 0) {
+            this.frameW = frameWidth;
+            this.frameH = frameHeight;
+        } else {
+            // Calcula tamanho do frame automaticamente
+            this.frameW = (int) Math.round(sheet.getWidth() / columns);
+            this.frameH = (int) Math.round(sheet.getHeight() / rows);
+        }
 
         System.out.println("[SpriteSheet] " + resourcePath + " carregado "
                 + (int)sheet.getWidth() + "x" + (int)sheet.getHeight()

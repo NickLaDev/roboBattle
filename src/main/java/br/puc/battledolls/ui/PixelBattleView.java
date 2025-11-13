@@ -45,10 +45,15 @@ public class PixelBattleView {
     private final UiBattleEngine engine;
     private final boolean isPVC; // true se modo Player vs CPU
     private final AIController aiController; // Controlador de IA (null se não for PvC)
+    private final GameFX campaignCallback; // Callback para campanha (null se não for campanha)
+    private final String cpuSpritePath; // Caminho base dos sprites da CPU (null se não for campanha)
+    private final br.puc.battledolls.campaign.CPUCharacter.SpriteFrameConfig cpuFrameConfig; // Configuração de frames
+                                                                                             // da CPU
 
     private Canvas canvas;
     private GraphicsContext gc;
     private AnimationTimer loop;
+    private boolean battleFinishedNotified = false; // Evita múltiplas notificações
 
     // BG
     private Image arena;
@@ -112,6 +117,10 @@ public class PixelBattleView {
     private double approachTarget = 0;
     private double attackTimer = 0;
 
+    // Timeout de segurança para desbloquear input se algo der errado
+    private double inputLockedTimer = 0;
+    private static final double INPUT_LOCK_TIMEOUT = 10.0; // 10 segundos
+
     // Deslocamentos horizontais (px)
     private double r1OffsetX = 0, r2OffsetX = 0;
 
@@ -133,13 +142,29 @@ public class PixelBattleView {
     private boolean victoryBoot = false;
 
     public PixelBattleView(UiBattleEngine engine) {
-        this(engine, false);
+        this(engine, false, null, null, null);
     }
-    
+
     public PixelBattleView(UiBattleEngine engine, boolean isPVC) {
+        this(engine, isPVC, null, null, null);
+    }
+
+    public PixelBattleView(UiBattleEngine engine, boolean isPVC, GameFX campaignCallback) {
+        this(engine, isPVC, campaignCallback, null, null);
+    }
+
+    public PixelBattleView(UiBattleEngine engine, boolean isPVC, GameFX campaignCallback, String cpuSpritePath) {
+        this(engine, isPVC, campaignCallback, cpuSpritePath, null);
+    }
+
+    public PixelBattleView(UiBattleEngine engine, boolean isPVC, GameFX campaignCallback, String cpuSpritePath,
+            br.puc.battledolls.campaign.CPUCharacter.SpriteFrameConfig cpuFrameConfig) {
         this.engine = engine;
         this.isPVC = isPVC;
         this.aiController = isPVC ? new AIController() : null;
+        this.campaignCallback = campaignCallback;
+        this.cpuSpritePath = cpuSpritePath;
+        this.cpuFrameConfig = cpuFrameConfig;
         var snap = engine.snapshot();
         this.leftName = snap.currentName;
         this.rightName = snap.enemyName;
@@ -157,57 +182,72 @@ public class PixelBattleView {
         victoryImg = safeLoad("/assets/ui/victory.png");
 
         // ===== Sprites =====
+        // Sprites do jogador (r1) - sempre usa os sprites padrão
         r1Idle = new SpriteSheet("/assets/characters/r1_idle.png", 6, 1);
-        r2Idle = new SpriteSheet("/assets/characters/r2_idle.png", 6, 1);
         anim1Idle = new SpriteAnimator(r1Idle.columns(), idleFps1);
-        anim2Idle = new SpriteAnimator(r2Idle.columns(), idleFps2);
 
         r1Atks = new SpriteSheet[] {
                 new SpriteSheet("/assets/characters/r1_attack1.png", 4, 1),
                 new SpriteSheet("/assets/characters/r1_attack2.png", 4, 1),
                 new SpriteSheet("/assets/characters/r1_attack3.png", 4, 1)
         };
-        r2Atks = new SpriteSheet[] {
-                new SpriteSheet("/assets/characters/r2_attack1.png", 4, 1),
-                new SpriteSheet("/assets/characters/r2_attack2.png", 4, 1),
-                new SpriteSheet("/assets/characters/r2_attack3.png", 4, 1)
-        };
         a1Atks = new SpriteAnimator[] {
                 new SpriteAnimator(r1Atks[0].columns(), atkFps1[0]),
                 new SpriteAnimator(r1Atks[1].columns(), atkFps1[1]),
                 new SpriteAnimator(r1Atks[2].columns(), atkFps1[2])
         };
-        a2Atks = new SpriteAnimator[] {
-                new SpriteAnimator(r2Atks[0].columns(), atkFps2[0]),
-                new SpriteAnimator(r2Atks[1].columns(), atkFps2[1]),
-                new SpriteAnimator(r2Atks[2].columns(), atkFps2[2])
-        };
 
         r1Run = new SpriteSheet("/assets/characters/r1_run.png", 8, 1);
-        r2Run = new SpriteSheet("/assets/characters/r2_run.png", 8, 1);
         anim1Run = new SpriteAnimator(r1Run.columns(), runFps1);
-        anim2Run = new SpriteAnimator(r2Run.columns(), runFps2);
 
         r1Defend = new SpriteSheet("/assets/characters/r1_defend.png", 2, 1);
-        r2Defend = new SpriteSheet("/assets/characters/r2_defend.png", 2, 1);
         anim1Defend = new SpriteAnimator(r1Defend.columns(), defendFps1);
-        anim2Defend = new SpriteAnimator(r2Defend.columns(), defendFps2);
         durDef1 = r1Defend.columns() / defendFps1;
-        durDef2 = r2Defend.columns() / defendFps2;
 
         r1Hurt = new SpriteSheet("/assets/characters/r1_hurt.png", 3, 1);
-        r2Hurt = new SpriteSheet("/assets/characters/r2_hurt.png", 3, 1);
         anim1Hurt = new SpriteAnimator(r1Hurt.columns(), hurtFps1);
-        anim2Hurt = new SpriteAnimator(r2Hurt.columns(), hurtFps2);
         durHurt1 = r1Hurt.columns() / hurtFps1;
-        durHurt2 = r2Hurt.columns() / hurtFps2;
 
         r1Death = new SpriteSheet("/assets/characters/r1_death.png", 3, 1);
-        r2Death = new SpriteSheet("/assets/characters/r2_death.png", 3, 1);
         anim1Death = new SpriteAnimator(r1Death.columns(), deathFps1);
-        anim2Death = new SpriteAnimator(r2Death.columns(), deathFps2);
         durDeath1 = r1Death.columns() / deathFps1;
-        durDeath2 = r2Death.columns() / deathFps2;
+
+        // Sprites da CPU (r2) - usa sprites customizados se for campanha, senão usa
+        // padrão
+        if (cpuSpritePath != null) {
+            // Carrega sprites dos personagens da pasta pc-characters
+            loadCPUSprites(cpuSpritePath);
+        } else {
+            // Usa sprites padrão
+            r2Idle = new SpriteSheet("/assets/characters/r2_idle.png", 6, 1);
+            anim2Idle = new SpriteAnimator(r2Idle.columns(), idleFps2);
+
+            r2Atks = new SpriteSheet[] {
+                    new SpriteSheet("/assets/characters/r2_attack1.png", 4, 1),
+                    new SpriteSheet("/assets/characters/r2_attack2.png", 4, 1),
+                    new SpriteSheet("/assets/characters/r2_attack3.png", 4, 1)
+            };
+            a2Atks = new SpriteAnimator[] {
+                    new SpriteAnimator(r2Atks[0].columns(), atkFps2[0]),
+                    new SpriteAnimator(r2Atks[1].columns(), atkFps2[1]),
+                    new SpriteAnimator(r2Atks[2].columns(), atkFps2[2])
+            };
+
+            r2Run = new SpriteSheet("/assets/characters/r2_run.png", 8, 1);
+            anim2Run = new SpriteAnimator(r2Run.columns(), runFps2);
+
+            r2Defend = new SpriteSheet("/assets/characters/r2_defend.png", 2, 1);
+            anim2Defend = new SpriteAnimator(r2Defend.columns(), defendFps2);
+            durDef2 = r2Defend.columns() / defendFps2;
+
+            r2Hurt = new SpriteSheet("/assets/characters/r2_hurt.png", 3, 1);
+            anim2Hurt = new SpriteAnimator(r2Hurt.columns(), hurtFps2);
+            durHurt2 = r2Hurt.columns() / hurtFps2;
+
+            r2Death = new SpriteSheet("/assets/characters/r2_death.png", 3, 1);
+            anim2Death = new SpriteAnimator(r2Death.columns(), deathFps2);
+            durDeath2 = r2Death.columns() / deathFps2;
+        }
 
         // ===== Overlay =====
         StackPane root = new StackPane(canvas);
@@ -302,12 +342,13 @@ public class PixelBattleView {
 
                 boolean finished = s.finished;
                 boolean isCPUTurn = isPVC && engine.isCurrentPlayerCPU();
-                
-                // Desabilita botões se for vez da CPU ou se o jogo terminou ou se input está bloqueado
+
+                // Desabilita botões se for vez da CPU ou se o jogo terminou ou se input está
+                // bloqueado
                 btnAtk.setDisable(finished || inputLocked || isCPUTurn);
                 btnDef.setDisable(finished || inputLocked || isCPUTurn);
                 btnSpc.setDisable(finished || inputLocked || isCPUTurn || !s.currentSpecial);
-                
+
                 // Se for vez da CPU e não estiver bloqueado, executa ação da IA
                 if (isCPUTurn && !inputLocked && !finished && phase == Phase.NONE) {
                     executeCPUAction();
@@ -317,17 +358,18 @@ public class PixelBattleView {
         loop.start();
         return scene;
     }
-    
+
     /**
      * Executa a ação escolhida pela IA para a CPU.
      * Adiciona um pequeno delay para parecer mais natural.
      */
     private void executeCPUAction() {
-        if (aiController == null || !isPVC) return;
-        
+        if (aiController == null || !isPVC)
+            return;
+
         // Bloqueia input durante a execução
         inputLocked = true;
-        
+
         // Pequeno delay para parecer que a CPU está "pensando"
         PauseTransition delay = new PauseTransition(Duration.millis(800 + Math.random() * 400));
         delay.setOnFinished(e -> {
@@ -335,10 +377,10 @@ public class PixelBattleView {
             // No modo PvC, p2 é sempre a CPU e p1 é sempre humano
             br.puc.battledolls.model.Player cpuPlayer = engine.getCurrentPlayer();
             br.puc.battledolls.model.Player humanPlayer = engine.getEnemyPlayer();
-            
+
             // Escolhe ação usando a IA
             Action aiAction = aiController.chooseAction(cpuPlayer, humanPlayer);
-            
+
             // Executa a ação
             perform(aiAction);
         });
@@ -414,11 +456,37 @@ public class PixelBattleView {
     private void update(double dt) {
         var snap = engine.snapshot();
 
+        // Timeout de segurança: se o input ficar bloqueado por muito tempo, desbloqueia
+        if (inputLocked) {
+            inputLockedTimer += dt;
+            if (inputLockedTimer > INPUT_LOCK_TIMEOUT) {
+                System.err.println("[AVISO] Input desbloqueado por timeout de segurança após " + inputLockedTimer + "s");
+                inputLocked = false;
+                phase = Phase.NONE;
+                inputLockedTimer = 0;
+            }
+        } else {
+            inputLockedTimer = 0;
+        }
+
         if (snap.finished) {
             // inicializa o fade/pop uma única vez
             if (!victoryBoot) {
                 victoryBoot = true;
                 victoryT = 0.0;
+
+                // Notifica callback da campanha se houver
+                if (campaignCallback != null && !battleFinishedNotified) {
+                    battleFinishedNotified = true;
+                    // Determina se o jogador venceu
+                    // No modo PvC, p1 é sempre o jogador humano
+                    String cpuName = engine.getCPUPlayerName();
+                    boolean playerWon = cpuName != null && !snap.winner.equals(cpuName);
+                    // Delay para mostrar a animação de vitória antes de mudar de tela
+                    PauseTransition delay = new PauseTransition(Duration.seconds(2));
+                    delay.setOnFinished(e -> campaignCallback.onCampaignBattleFinished(playerWon));
+                    delay.play();
+                }
             }
             victoryT = Math.min(1.0, victoryT + dt * 1.6); // velocidade da transição
             return;
@@ -600,6 +668,7 @@ public class PixelBattleView {
 
     private void finishCinematic() {
         inputLocked = false;
+        inputLockedTimer = 0;
         phase = Phase.NONE;
         pendingAction = null;
         beforeSnap = null;
@@ -667,6 +736,8 @@ public class PixelBattleView {
         int x2 = (int) Math.round(r2x + r2OffsetX);
 
         // Desenho
+        // P1 nunca espelha (sempre virado para direita)
+        // P2 sempre espelha (precisa ficar virado para esquerda)
         drawSprite(img1, x1, r1y, drawW1, drawH1, false);
         drawSprite(img2, x2, r2y, drawW2, drawH2, true);
 
@@ -683,9 +754,14 @@ public class PixelBattleView {
         if (!flipX) {
             gc.drawImage(frame, 0, 0, frame.getWidth(), frame.getHeight(), x, y, drawW, drawH);
         } else {
+            // Espelha horizontalmente usando o ponto de ancoragem correto (canto superior
+            // direito)
             gc.save();
+            // Move para a posição x + largura (canto superior direito)
             gc.translate(x + drawW, y);
+            // Espelha horizontalmente
             gc.scale(-1, 1);
+            // Desenha a imagem na origem (0,0) após a transformação
             gc.drawImage(frame, 0, 0, frame.getWidth(), frame.getHeight(), 0, 0, drawW, drawH);
             gc.restore();
         }
@@ -736,12 +812,8 @@ public class PixelBattleView {
 
         if (a == Action.DEFEND) {
             engine.perform(a);
-            // Se for CPU, desbloqueia após um pequeno delay para permitir próxima ação
-            if (isPVC && engine.isCurrentPlayerCPU()) {
-                PauseTransition delay = new PauseTransition(Duration.millis(500));
-                delay.setOnFinished(e -> inputLocked = false);
-                delay.play();
-            }
+            // Desbloqueia input após animação de defesa (tanto CPU quanto jogador)
+            inputLocked = false;
             return;
         }
 
@@ -871,6 +943,96 @@ public class PixelBattleView {
         try (InputStream in = getClass().getResourceAsStream(path)) {
             return (in == null) ? null : new Image(in, 0, 0, false, false);
         } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /**
+     * Carrega os sprites da CPU da pasta pc-characters.
+     * Usa a configuração de frames específica do personagem se disponível.
+     */
+    private void loadCPUSprites(String spritePath) {
+        // Usa configuração customizada se disponível, senão usa valores padrão
+        br.puc.battledolls.campaign.CPUCharacter.SpriteFrameConfig config = cpuFrameConfig;
+        if (config == null) {
+            config = new br.puc.battledolls.campaign.CPUCharacter.SpriteFrameConfig();
+        }
+
+        // Idle
+        String idlePath = spritePath + "/Idle.png";
+        r2Idle = safeLoadSpriteSheet(idlePath, config.idleFrames, 1, config.frameWidth, config.frameHeight);
+        if (r2Idle == null) {
+            // Fallback para sprite padrão se não encontrar
+            r2Idle = new SpriteSheet("/assets/characters/r2_idle.png", 6, 1);
+        }
+        anim2Idle = new SpriteAnimator(r2Idle.columns(), idleFps2);
+
+        // Ataques: Attack_1, Attack_2, Attack_3
+        r2Atks = new SpriteSheet[3];
+        a2Atks = new SpriteAnimator[3];
+        int[] attackFrames = { config.attack1Frames, config.attack2Frames, config.attack3Frames };
+        for (int i = 0; i < 3; i++) {
+            String atkPath = spritePath + "/Attack_" + (i + 1) + ".png";
+            r2Atks[i] = safeLoadSpriteSheet(atkPath, attackFrames[i], 1, config.frameWidth, config.frameHeight);
+            if (r2Atks[i] == null) {
+                // Fallback
+                r2Atks[i] = new SpriteSheet("/assets/characters/r2_attack" + (i + 1) + ".png", 4, 1);
+            }
+            a2Atks[i] = new SpriteAnimator(r2Atks[i].columns(), atkFps2[i]);
+        }
+
+        // Run
+        String runPath = spritePath + "/Run.png";
+        r2Run = safeLoadSpriteSheet(runPath, config.runFrames, 1, config.frameWidth, config.frameHeight);
+        if (r2Run == null) {
+            r2Run = new SpriteSheet("/assets/characters/r2_run.png", 8, 1);
+        }
+        anim2Run = new SpriteAnimator(r2Run.columns(), runFps2);
+
+        // Defend: Protect.png
+        String defendPath = spritePath + "/Protect.png";
+        r2Defend = safeLoadSpriteSheet(defendPath, config.defendFrames, 1, config.frameWidth, config.frameHeight);
+        if (r2Defend == null) {
+            r2Defend = new SpriteSheet("/assets/characters/r2_defend.png", 2, 1);
+        }
+        anim2Defend = new SpriteAnimator(r2Defend.columns(), defendFps2);
+        durDef2 = r2Defend.columns() / defendFps2;
+
+        // Hurt
+        String hurtPath = spritePath + "/Hurt.png";
+        r2Hurt = safeLoadSpriteSheet(hurtPath, config.hurtFrames, 1, config.frameWidth, config.frameHeight);
+        if (r2Hurt == null) {
+            r2Hurt = new SpriteSheet("/assets/characters/r2_hurt.png", 3, 1);
+        }
+        anim2Hurt = new SpriteAnimator(r2Hurt.columns(), hurtFps2);
+        durHurt2 = r2Hurt.columns() / hurtFps2;
+
+        // Death: Dead.png
+        String deathPath = spritePath + "/Dead.png";
+        r2Death = safeLoadSpriteSheet(deathPath, config.deathFrames, 1, config.frameWidth, config.frameHeight);
+        if (r2Death == null) {
+            r2Death = new SpriteSheet("/assets/characters/r2_death.png", 3, 1);
+        }
+        anim2Death = new SpriteAnimator(r2Death.columns(), deathFps2);
+        durDeath2 = r2Death.columns() / deathFps2;
+    }
+
+    /**
+     * Tenta carregar um SpriteSheet de forma segura, retornando null se falhar.
+     */
+    private SpriteSheet safeLoadSpriteSheet(String path, int columns, int rows) {
+        return safeLoadSpriteSheet(path, columns, rows, -1, -1);
+    }
+
+    /**
+     * Tenta carregar um SpriteSheet de forma segura com tamanho de frame fixo,
+     * retornando null se falhar.
+     */
+    private SpriteSheet safeLoadSpriteSheet(String path, int columns, int rows, int frameWidth, int frameHeight) {
+        try {
+            return new SpriteSheet(path, columns, rows, frameWidth, frameHeight);
+        } catch (Exception e) {
+            System.err.println("Erro ao carregar sprite: " + path + " - " + e.getMessage());
             return null;
         }
     }

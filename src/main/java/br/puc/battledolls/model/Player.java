@@ -14,4 +14,13 @@ public class Player {
         if (totalCost <= credits) { credits -= totalCost; this.robot = r; return true; }
         return false;
     }
+    
+    /**
+     * Adiciona créditos ao jogador (usado em recompensas de campanha).
+     */
+    public void addCredits(int amount) {
+        if (amount > 0) {
+            credits += amount;
+        }
+    }
 }
