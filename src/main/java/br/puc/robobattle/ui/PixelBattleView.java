@@ -1,7 +1,10 @@
 package br.puc.robobattle.ui;
 
+import br.puc.robobattle.ai.AIController;
 import br.puc.robobattle.combat.Action;
 import javafx.animation.AnimationTimer;
+import javafx.animation.PauseTransition;
+import javafx.util.Duration;
 import javafx.geometry.Insets;
 import javafx.geometry.Pos;
 import javafx.scene.Scene;
@@ -40,6 +43,8 @@ public class PixelBattleView {
     private static final int HIT_OVERLAP = 20; // invade um pouco o centro
 
     private final UiBattleEngine engine;
+    private final boolean isPVC; // true se modo Player vs CPU
+    private final AIController aiController; // Controlador de IA (null se não for PvC)
 
     private Canvas canvas;
     private GraphicsContext gc;
@@ -128,7 +133,13 @@ public class PixelBattleView {
     private boolean victoryBoot = false;
 
     public PixelBattleView(UiBattleEngine engine) {
+        this(engine, false);
+    }
+    
+    public PixelBattleView(UiBattleEngine engine, boolean isPVC) {
         this.engine = engine;
+        this.isPVC = isPVC;
+        this.aiController = isPVC ? new AIController() : null;
         var snap = engine.snapshot();
         this.leftName = snap.currentName;
         this.rightName = snap.enemyName;
@@ -290,13 +301,48 @@ public class PixelBattleView {
                 }
 
                 boolean finished = s.finished;
-                btnAtk.setDisable(finished || inputLocked);
-                btnDef.setDisable(finished || inputLocked);
-                btnSpc.setDisable(finished || inputLocked || !s.currentSpecial);
+                boolean isCPUTurn = isPVC && engine.isCurrentPlayerCPU();
+                
+                // Desabilita botões se for vez da CPU ou se o jogo terminou ou se input está bloqueado
+                btnAtk.setDisable(finished || inputLocked || isCPUTurn);
+                btnDef.setDisable(finished || inputLocked || isCPUTurn);
+                btnSpc.setDisable(finished || inputLocked || isCPUTurn || !s.currentSpecial);
+                
+                // Se for vez da CPU e não estiver bloqueado, executa ação da IA
+                if (isCPUTurn && !inputLocked && !finished && phase == Phase.NONE) {
+                    executeCPUAction();
+                }
             }
         };
         loop.start();
         return scene;
+    }
+    
+    /**
+     * Executa a ação escolhida pela IA para a CPU.
+     * Adiciona um pequeno delay para parecer mais natural.
+     */
+    private void executeCPUAction() {
+        if (aiController == null || !isPVC) return;
+        
+        // Bloqueia input durante a execução
+        inputLocked = true;
+        
+        // Pequeno delay para parecer que a CPU está "pensando"
+        PauseTransition delay = new PauseTransition(Duration.millis(800 + Math.random() * 400));
+        delay.setOnFinished(e -> {
+            // Obtém os jogadores do engine
+            // No modo PvC, p2 é sempre a CPU e p1 é sempre humano
+            br.puc.robobattle.model.Player cpuPlayer = engine.getCurrentPlayer();
+            br.puc.robobattle.model.Player humanPlayer = engine.getEnemyPlayer();
+            
+            // Escolhe ação usando a IA
+            Action aiAction = aiController.chooseAction(cpuPlayer, humanPlayer);
+            
+            // Executa a ação
+            perform(aiAction);
+        });
+        delay.play();
     }
 
     // ======== Estilos ========
@@ -690,6 +736,12 @@ public class PixelBattleView {
 
         if (a == Action.DEFEND) {
             engine.perform(a);
+            // Se for CPU, desbloqueia após um pequeno delay para permitir próxima ação
+            if (isPVC && engine.isCurrentPlayerCPU()) {
+                PauseTransition delay = new PauseTransition(Duration.millis(500));
+                delay.setOnFinished(e -> inputLocked = false);
+                delay.play();
+            }
             return;
         }
 

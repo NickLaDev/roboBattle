@@ -1,5 +1,6 @@
 package br.puc.robobattle.ui;
 
+import br.puc.robobattle.ai.CPURobotBuilder;
 import br.puc.robobattle.items.Armor;
 import br.puc.robobattle.items.Weapon;
 import br.puc.robobattle.model.Player;
@@ -26,7 +27,6 @@ import javafx.stage.Stage;
 
 import java.io.InputStream;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.function.IntSupplier;
 import java.util.function.IntUnaryOperator;
@@ -49,6 +49,13 @@ public class GameFX extends Application {
 
     // ===== Jogo =====
     private static final int START_CREDITS = 1000;
+
+    // Modo de jogo: PvP (Player vs Player) ou PvC (Player vs CPU)
+    private enum GameMode {
+        PVP, PVC
+    }
+
+    private GameMode gameMode = GameMode.PVP;
 
     private Stage stage;
     private Player p1, p2;
@@ -96,13 +103,44 @@ public class GameFX extends Application {
         placePx(tf1, SLOT1_X, SLOT1_Y, SLOT1_W, SLOT1_H, IMG_W, IMG_H);
         placePx(tf2, SLOT2_X, SLOT2_Y, SLOT2_W, SLOT2_H, IMG_W, IMG_H);
 
+        // Seleção de modo de jogo
+        ToggleGroup modeGroup = new ToggleGroup();
+        RadioButton rbPvP = new RadioButton("Player vs Player");
+        RadioButton rbPvC = new RadioButton("Player vs CPU");
+        rbPvP.setToggleGroup(modeGroup);
+        rbPvC.setToggleGroup(modeGroup);
+        rbPvP.setSelected(true);
+        rbPvP.setTextFill(Color.web("#EDE9FE"));
+        rbPvC.setTextFill(Color.web("#EDE9FE"));
+        rbPvP.setStyle("-fx-font-size: 14px;");
+        rbPvC.setStyle("-fx-font-size: 14px;");
+
+        VBox modeBox = new VBox(8, rbPvP, rbPvC);
+        modeBox.setAlignment(Pos.CENTER_LEFT);
+        modeBox.setPadding(new Insets(8));
+        modeBox.setStyle("-fx-background-color: rgba(0,0,0,0.5); -fx-background-radius: 8;");
+        placePx(modeBox, SLOT1_X, SLOT2_Y + SLOT2_H + 20, 250, 70, IMG_W, IMG_H);
+
+        modeGroup.selectedToggleProperty().addListener((obs, old, sel) -> {
+            if (sel == rbPvP) {
+                gameMode = GameMode.PVP;
+                tf2.setDisable(false);
+                tf2.setOpacity(1.0);
+            } else {
+                gameMode = GameMode.PVC;
+                tf2.setDisable(true);
+                tf2.setOpacity(0.5);
+                tf2.setText("CPU");
+            }
+        });
+
         Button enterBtn = new Button();
         enterBtn.setOpacity(0.0);
         enterBtn.setBackground(Background.EMPTY);
         enterBtn.setBorder(Border.EMPTY);
         placePx(enterBtn, ENTER_X, ENTER_Y, ENTER_W, ENTER_H, IMG_W, IMG_H);
 
-        board.getChildren().addAll(tf1, tf2, enterBtn);
+        board.getChildren().addAll(tf1, tf2, modeBox, enterBtn);
 
         StackPane root = new StackPane(board);
         root.setStyle("-fx-background-color: black;");
@@ -119,7 +157,8 @@ public class GameFX extends Application {
 
         Runnable submit = () -> {
             String n1 = (tf1.getText() == null || tf1.getText().isBlank()) ? "Jogador 1" : tf1.getText().trim();
-            String n2 = (tf2.getText() == null || tf2.getText().isBlank()) ? "Jogador 2" : tf2.getText().trim();
+            String n2 = (gameMode == GameMode.PVC) ? "CPU"
+                    : ((tf2.getText() == null || tf2.getText().isBlank()) ? "Jogador 2" : tf2.getText().trim());
             p1 = new Player(n1, START_CREDITS);
             p2 = new Player(n2, START_CREDITS);
             showShopScreen(p1, true);
@@ -150,7 +189,7 @@ public class GameFX extends Application {
                     -fx-background-radius: 0;
                     -fx-border-color: transparent;
                     -fx-text-fill: #EDE9FE;
-                    -fx-prompt-text-fill: rgba(229,231,235,0.75);
+                    -fx-prompt-text-fill: rgba(229,231,235,0.75);n
                     -fx-caret-color: #BB86FC;
                     -fx-highlight-fill: rgba(187,134,252,0.35);
                     -fx-highlight-text-fill: white;
@@ -315,7 +354,13 @@ public class GameFX extends Application {
             }
             if (isFirstPlayer) {
                 pur1 = p;
-                showShopScreen(p2, false);
+                // No modo PvC, pula a loja do jogador 2 e gera robô automaticamente
+                if (gameMode == GameMode.PVC) {
+                    generateCPURobot();
+                    showBattleScreen();
+                } else {
+                    showShopScreen(p2, false);
+                }
             } else {
                 pur2 = p;
                 showBattleScreen();
@@ -352,9 +397,19 @@ public class GameFX extends Application {
     // =========================================================
     // 3) BATALHA
     // =========================================================
+    private void generateCPURobot() {
+        // Gera robô automaticamente para a CPU
+        CPURobotBuilder builder = new CPURobotBuilder();
+        Robot cpuRobot = builder.buildRobot(START_CREDITS);
+        // Equipa o robô na CPU sem descontar créditos (CPU tem créditos ilimitados)
+        p2.buyAndEquip(cpuRobot, 0);
+        // Cria um Purchase para manter compatibilidade
+        pur2 = new Purchase(cpuRobot.characterClass(), cpuRobot, 0);
+    }
+
     private void showBattleScreen() {
-        engine = new UiBattleEngine(p1, p2);
-        PixelBattleView pixelView = new PixelBattleView(engine);
+        engine = new UiBattleEngine(p1, p2, gameMode == GameMode.PVC);
+        PixelBattleView pixelView = new PixelBattleView(engine, gameMode == GameMode.PVC);
         Scene battleScene = pixelView.buildScene();
         stage.setScene(battleScene);
     }

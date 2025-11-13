@@ -1,0 +1,10 @@
+Coisas a melhorar projeto java:
+1-Acertar a animação do especial + Efeito visual deixando claro oq esta acontecendo no ataque do especial
+2-Musicas + Efeitos sonoros
+3-Melhorar jogabilidade
+4-Adicionar mais personagens
+5-Pensar em mudar o sistema de turnos 
+6-Pensar em mudar para pve
+7-Adicionar sistema de melhorias a cada batalha ganha
+8-Poder levar mais de um personagem e trocar eles durante a batalha[
+9-Ter um boss final

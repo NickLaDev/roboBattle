@@ -4,7 +4,6 @@ import br.puc.robobattle.combat.Action;
 import br.puc.robobattle.combat.DamageCalculator;
 import br.puc.robobattle.combat.DamageResult;
 import br.puc.robobattle.model.Player;
-import br.puc.robobattle.model.Robot;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -58,16 +57,64 @@ public class UiBattleEngine {
     private final DamageCalculator calc = new DamageCalculator();
     private final Random rng = new Random();
     private final Player p1, p2;
+    private final boolean isPVC; // true se modo Player vs CPU
     private Player current, enemy;
     private int round = 1;
     private boolean finished = false;
     private String winnerName = null;
 
     public UiBattleEngine(Player p1, Player p2) {
+        this(p1, p2, false);
+    }
+    
+    public UiBattleEngine(Player p1, Player p2, boolean isPVC) {
         this.p1 = p1;
         this.p2 = p2;
+        this.isPVC = isPVC;
         this.current = rng.nextBoolean() ? p1 : p2;
         this.enemy = (current == p1) ? p2 : p1;
+    }
+    
+    /**
+     * Verifica se o jogador atual é a CPU (no modo PvC, p2 é sempre CPU).
+     */
+    public boolean isCurrentPlayerCPU() {
+        return isPVC && current == p2;
+    }
+    
+    /**
+     * Retorna o nome do jogador que é CPU (null se não houver).
+     */
+    public String getCPUPlayerName() {
+        return isPVC ? p2.name() : null;
+    }
+    
+    /**
+     * Retorna o jogador 1 (sempre humano no modo PvC).
+     */
+    public Player getPlayer1() {
+        return p1;
+    }
+    
+    /**
+     * Retorna o jogador 2 (CPU no modo PvC, humano no modo PvP).
+     */
+    public Player getPlayer2() {
+        return p2;
+    }
+    
+    /**
+     * Retorna o jogador atual (pode ser CPU no modo PvC).
+     */
+    public Player getCurrentPlayer() {
+        return current;
+    }
+    
+    /**
+     * Retorna o jogador inimigo do atual.
+     */
+    public Player getEnemyPlayer() {
+        return enemy;
     }
 
     public Snapshot snapshot() {
