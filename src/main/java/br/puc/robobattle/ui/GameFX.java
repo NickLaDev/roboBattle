@@ -17,6 +17,7 @@ import javafx.geometry.Pos;
 import javafx.scene.Node;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
 import javafx.scene.input.KeyCode;
@@ -43,6 +44,7 @@ public class GameFX extends Application {
 
     // ===== Recursos =====
     private static final String INTRO_BG = "/assets/ui/intro.png";
+    private static final String SELECTION_BG = "/assets/ui/selection.png";
     private static final String SHOP_BG = "/assets/ui/shop.png";
     private static final String SWORD_FMT = "/assets/items/swords/sword%d.png";
     private static final String SHIELD_FMT = "/assets/items/shields/shield%d.png";
@@ -78,12 +80,181 @@ public class GameFX extends Application {
     public void start(Stage stage) {
         this.stage = stage;
         stage.setTitle("RoboBattle (FX)");
-        showNameScreen();
+        showModeSelectionScreen();
         stage.show();
     }
 
     // =========================================================
-    // 1) TELA DE NOMES (igual à que estava funcionando)
+    // 1) TELA DE SELEÇÃO DE MODO (nova tela com selection.png)
+    // =========================================================
+    private void showModeSelectionScreen() {
+        Image bg = load(SELECTION_BG);
+        final double IMG_W = bg.getWidth();
+        final double IMG_H = bg.getHeight();
+
+        Pane board = new Pane();
+        board.setPrefSize(IMG_W, IMG_H);
+        board.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setBackground(new Background(new BackgroundImage(
+                bg, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER, new BackgroundSize(IMG_W, IMG_H, false, false, false, false))));
+
+        // ===== CONFIGURAÇÃO DE POSIÇÃO DOS BOTÕES =====
+        // Ajuste estes valores para alinhar os botões com sua imagem
+
+        // Dimensões dos botões
+        final double BUTTON_WIDTH = 400;
+        final double BUTTON_HEIGHT = 60;
+        final double BUTTON_SPACING = 20; // Espaço entre os botões
+
+        // Posição do botão PvP (Player vs Player)
+        final double PVP_BUTTON_X = 520; // ← AJUSTE AQUI: posição X do botão PvP
+        final double PVP_BUTTON_Y = 560; // ← AJUSTE AQUI: posição Y do botão PvP
+
+        // Posição do botão PvC (Player vs CPU)
+        final double PVC_BUTTON_X = 520; // ← AJUSTE AQUI: posição X do botão PvC
+        final double PVC_BUTTON_Y = 480; // ← AJUSTE AQUI: posição Y do botão PvC
+
+        // Posição do título
+        final double TITLE_X = 460; // ← AJUSTE AQUI: posição X do título
+        final double TITLE_Y = 350; // ← AJUSTE AQUI: posição Y do título
+
+        // ===============================================
+
+        // Título
+        Label title = new Label("SELECIONE O MODO DE JOGO");
+        title.setTextFill(Color.web("#BB86FC"));
+        title.setStyle("""
+                    -fx-font-family: "Georgia", "Times New Roman", serif;
+                    -fx-font-size: 32px;
+                    -fx-font-weight: bold;
+                """);
+        DropShadow titleGlow = new DropShadow(30, Color.web("#BB86FC"));
+        titleGlow.setSpread(0.3);
+        title.setEffect(titleGlow);
+        title.setLayoutX(TITLE_X);
+        title.setLayoutY(TITLE_Y);
+
+        // Botão Player vs Player
+        Button btnPvP = createModeButton("PLAYER vs PLAYER", "#60a5fa");
+        btnPvP.setPrefWidth(BUTTON_WIDTH);
+        btnPvP.setPrefHeight(BUTTON_HEIGHT);
+        btnPvP.setLayoutX(PVP_BUTTON_X);
+        btnPvP.setLayoutY(PVP_BUTTON_Y);
+        btnPvP.setOnAction(e -> {
+            gameMode = GameMode.PVP;
+            showNameScreen();
+        });
+
+        // Botão Player vs CPU
+        Button btnPvC = createModeButton("PLAYER vs CPU", "#fb7185");
+        btnPvC.setPrefWidth(BUTTON_WIDTH);
+        btnPvC.setPrefHeight(BUTTON_HEIGHT);
+        btnPvC.setLayoutX(PVC_BUTTON_X);
+        btnPvC.setLayoutY(PVC_BUTTON_Y);
+        btnPvC.setOnAction(e -> {
+            gameMode = GameMode.PVC;
+            showNameScreen();
+        });
+
+        board.getChildren().addAll(title, btnPvP, btnPvC);
+
+        StackPane root = new StackPane(board);
+        root.setStyle("-fx-background-color: black;");
+        Scene scene = new Scene(root, 1280, 720);
+
+        Runnable rescale = () -> {
+            double s = Math.min(scene.getWidth() / IMG_W, scene.getHeight() / IMG_H);
+            board.setScaleX(s);
+            board.setScaleY(s);
+        };
+        scene.widthProperty().addListener((o, a, b) -> rescale.run());
+        scene.heightProperty().addListener((o, a, b) -> rescale.run());
+        rescale.run();
+
+        scene.setOnKeyPressed(e -> {
+            if (e.getCode() == KeyCode.ESCAPE)
+                stage.close();
+        });
+
+        stage.setScene(scene);
+        stage.centerOnScreen();
+    }
+
+    /**
+     * Cria um botão estilizado no tema gótico/neon purple.
+     */
+    private Button createModeButton(String text, String accentColor) {
+        Button btn = new Button(text);
+        btn.setTextFill(Color.web("#F5F3FF"));
+        btn.setStyle(String.format("""
+                    -fx-font-family: "Georgia", "Times New Roman", serif;
+                    -fx-font-size: 20px;
+                    -fx-font-weight: bold;
+                    -fx-background-color: linear-gradient(rgba(35,22,45,0.85), rgba(25,16,32,0.85));
+                    -fx-background-radius: 12;
+                    -fx-border-color: %s;
+                    -fx-border-width: 2;
+                    -fx-border-radius: 12;
+                    -fx-padding: 16 32 16 32;
+                    -fx-cursor: hand;
+                """, accentColor));
+
+        DropShadow glow = new DropShadow(25, Color.web(accentColor));
+        glow.setSpread(0.25);
+
+        btn.setOnMouseEntered(e -> {
+            btn.setEffect(glow);
+            btn.setScaleX(1.05);
+            btn.setScaleY(1.05);
+            btn.setStyle(String.format("""
+                        -fx-font-family: "Georgia", "Times New Roman", serif;
+                        -fx-font-size: 20px;
+                        -fx-font-weight: bold;
+                        -fx-background-color: linear-gradient(rgba(45,30,55,0.95), rgba(35,24,42,0.95));
+                        -fx-background-radius: 12;
+                        -fx-border-color: %s;
+                        -fx-border-width: 3;
+                        -fx-border-radius: 12;
+                        -fx-padding: 16 32 16 32;
+                        -fx-cursor: hand;
+                    """, accentColor));
+        });
+
+        btn.setOnMouseExited(e -> {
+            btn.setEffect(null);
+            btn.setScaleX(1.0);
+            btn.setScaleY(1.0);
+            btn.setStyle(String.format("""
+                        -fx-font-family: "Georgia", "Times New Roman", serif;
+                        -fx-font-size: 20px;
+                        -fx-font-weight: bold;
+                        -fx-background-color: linear-gradient(rgba(35,22,45,0.85), rgba(25,16,32,0.85));
+                        -fx-background-radius: 12;
+                        -fx-border-color: %s;
+                        -fx-border-width: 2;
+                        -fx-border-radius: 12;
+                        -fx-padding: 16 32 16 32;
+                        -fx-cursor: hand;
+                    """, accentColor));
+        });
+
+        btn.setOnMousePressed(e -> {
+            btn.setScaleX(0.98);
+            btn.setScaleY(0.98);
+        });
+
+        btn.setOnMouseReleased(e -> {
+            btn.setScaleX(1.05);
+            btn.setScaleY(1.05);
+        });
+
+        return btn;
+    }
+
+    // =========================================================
+    // 2) TELA DE NOMES (removida seleção de modo daqui)
     // =========================================================
     private void showNameScreen() {
         Image bg = load(INTRO_BG);
@@ -103,36 +274,12 @@ public class GameFX extends Application {
         placePx(tf1, SLOT1_X, SLOT1_Y, SLOT1_W, SLOT1_H, IMG_W, IMG_H);
         placePx(tf2, SLOT2_X, SLOT2_Y, SLOT2_W, SLOT2_H, IMG_W, IMG_H);
 
-        // Seleção de modo de jogo
-        ToggleGroup modeGroup = new ToggleGroup();
-        RadioButton rbPvP = new RadioButton("Player vs Player");
-        RadioButton rbPvC = new RadioButton("Player vs CPU");
-        rbPvP.setToggleGroup(modeGroup);
-        rbPvC.setToggleGroup(modeGroup);
-        rbPvP.setSelected(true);
-        rbPvP.setTextFill(Color.web("#EDE9FE"));
-        rbPvC.setTextFill(Color.web("#EDE9FE"));
-        rbPvP.setStyle("-fx-font-size: 14px;");
-        rbPvC.setStyle("-fx-font-size: 14px;");
-
-        VBox modeBox = new VBox(8, rbPvP, rbPvC);
-        modeBox.setAlignment(Pos.CENTER_LEFT);
-        modeBox.setPadding(new Insets(8));
-        modeBox.setStyle("-fx-background-color: rgba(0,0,0,0.5); -fx-background-radius: 8;");
-        placePx(modeBox, SLOT1_X, SLOT2_Y + SLOT2_H + 20, 250, 70, IMG_W, IMG_H);
-
-        modeGroup.selectedToggleProperty().addListener((obs, old, sel) -> {
-            if (sel == rbPvP) {
-                gameMode = GameMode.PVP;
-                tf2.setDisable(false);
-                tf2.setOpacity(1.0);
-            } else {
-                gameMode = GameMode.PVC;
-                tf2.setDisable(true);
-                tf2.setOpacity(0.5);
-                tf2.setText("CPU");
-            }
-        });
+        // No modo PvC, desabilita o campo do jogador 2
+        if (gameMode == GameMode.PVC) {
+            tf2.setDisable(true);
+            tf2.setOpacity(0.5);
+            tf2.setText("CPU");
+        }
 
         Button enterBtn = new Button();
         enterBtn.setOpacity(0.0);
@@ -140,7 +287,7 @@ public class GameFX extends Application {
         enterBtn.setBorder(Border.EMPTY);
         placePx(enterBtn, ENTER_X, ENTER_Y, ENTER_W, ENTER_H, IMG_W, IMG_H);
 
-        board.getChildren().addAll(tf1, tf2, modeBox, enterBtn);
+        board.getChildren().addAll(tf1, tf2, enterBtn);
 
         StackPane root = new StackPane(board);
         root.setStyle("-fx-background-color: black;");
