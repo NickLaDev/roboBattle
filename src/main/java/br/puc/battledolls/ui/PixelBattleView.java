@@ -13,6 +13,7 @@ import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
 import javafx.scene.effect.DropShadow;
+import javafx.scene.effect.Glow;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
@@ -141,6 +142,30 @@ public class PixelBattleView {
     private double victoryT = 0.0; // 0→1 (animação)
     private boolean victoryBoot = false;
 
+    // === Efeitos Visuais (textos flutuantes) ===
+    private static class FloatingText {
+        String text;
+        double x, y;
+        double t; // tempo (0→1)
+        Color color;
+        double scale;
+        double baseFontSize;
+        boolean isCritical;
+
+        FloatingText(String text, double x, double y, Color color, boolean isCritical) {
+            this.text = text;
+            this.x = x;
+            this.y = y;
+            this.t = 0.0;
+            this.color = color;
+            this.scale = isCritical ? 1.2 : 1.0;
+            this.baseFontSize = isCritical ? 40.0 : 34.0;
+            this.isCritical = isCritical;
+        }
+    }
+
+    private final java.util.List<FloatingText> floatingTexts = new java.util.ArrayList<>();
+
     public PixelBattleView(UiBattleEngine engine) {
         this(engine, false, null, null, null);
     }
@@ -165,9 +190,18 @@ public class PixelBattleView {
         this.campaignCallback = campaignCallback;
         this.cpuSpritePath = cpuSpritePath;
         this.cpuFrameConfig = cpuFrameConfig;
-        var snap = engine.snapshot();
-        this.leftName = snap.currentName;
-        this.rightName = snap.enemyName;
+
+        // No modo PvC, P1 é sempre o jogador humano (esquerda) e P2 é sempre a CPU
+        // (direita)
+        // No modo PvP, usa o snapshot atual
+        if (isPVC) {
+            this.leftName = engine.getPlayer1().name(); // Jogador humano sempre à esquerda
+            this.rightName = engine.getPlayer2().name(); // CPU sempre à direita
+        } else {
+            var snap = engine.snapshot();
+            this.leftName = snap.currentName;
+            this.rightName = snap.enemyName;
+        }
     }
 
     public Scene buildScene() {
@@ -182,35 +216,8 @@ public class PixelBattleView {
         victoryImg = safeLoad("/assets/ui/victory.png");
 
         // ===== Sprites =====
-        // Sprites do jogador (r1) - sempre usa os sprites padrão
-        r1Idle = new SpriteSheet("/assets/characters/r1_idle.png", 6, 1);
-        anim1Idle = new SpriteAnimator(r1Idle.columns(), idleFps1);
-
-        r1Atks = new SpriteSheet[] {
-                new SpriteSheet("/assets/characters/r1_attack1.png", 4, 1),
-                new SpriteSheet("/assets/characters/r1_attack2.png", 4, 1),
-                new SpriteSheet("/assets/characters/r1_attack3.png", 4, 1)
-        };
-        a1Atks = new SpriteAnimator[] {
-                new SpriteAnimator(r1Atks[0].columns(), atkFps1[0]),
-                new SpriteAnimator(r1Atks[1].columns(), atkFps1[1]),
-                new SpriteAnimator(r1Atks[2].columns(), atkFps1[2])
-        };
-
-        r1Run = new SpriteSheet("/assets/characters/r1_run.png", 8, 1);
-        anim1Run = new SpriteAnimator(r1Run.columns(), runFps1);
-
-        r1Defend = new SpriteSheet("/assets/characters/r1_defend.png", 2, 1);
-        anim1Defend = new SpriteAnimator(r1Defend.columns(), defendFps1);
-        durDef1 = r1Defend.columns() / defendFps1;
-
-        r1Hurt = new SpriteSheet("/assets/characters/r1_hurt.png", 3, 1);
-        anim1Hurt = new SpriteAnimator(r1Hurt.columns(), hurtFps1);
-        durHurt1 = r1Hurt.columns() / hurtFps1;
-
-        r1Death = new SpriteSheet("/assets/characters/r1_death.png", 3, 1);
-        anim1Death = new SpriteAnimator(r1Death.columns(), deathFps1);
-        durDeath1 = r1Death.columns() / deathFps1;
+        // Sprites do jogador (r1) - carrega baseado no personagem escolhido
+        loadPlayer1Sprites();
 
         // Sprites da CPU (r2) - usa sprites customizados se for campanha, senão usa
         // padrão
@@ -460,7 +467,8 @@ public class PixelBattleView {
         if (inputLocked) {
             inputLockedTimer += dt;
             if (inputLockedTimer > INPUT_LOCK_TIMEOUT) {
-                System.err.println("[AVISO] Input desbloqueado por timeout de segurança após " + inputLockedTimer + "s");
+                System.err
+                        .println("[AVISO] Input desbloqueado por timeout de segurança após " + inputLockedTimer + "s");
                 inputLocked = false;
                 phase = Phase.NONE;
                 inputLockedTimer = 0;
@@ -548,6 +556,9 @@ public class PixelBattleView {
                 /* segue fluxo normal */ }
         }
 
+        // Atualiza textos flutuantes
+        updateFloatingTexts(dt);
+
         // Fluxo normal
         tickDefendHurt(dt);
 
@@ -605,7 +616,12 @@ public class PixelBattleView {
 
     /** Executa o golpe no IMPACT, decide DEFEND/HURT e liga a anim de ataque. */
     private void startImpact() {
-        engine.perform(pendingAction); // aplica dano, troca turno, etc.
+        var result = engine.perform(pendingAction); // aplica dano, troca turno, etc.
+
+        // Cria efeitos visuais baseados no evento
+        if (result.event != null) {
+            createVisualEffects(result.event);
+        }
 
         // Se acabou a luta, a sequência encerra
         if (engine.snapshot().finished) {
@@ -743,6 +759,9 @@ public class PixelBattleView {
 
         drawHpBarsHD();
 
+        // Desenha efeitos visuais (textos flutuantes)
+        drawFloatingTexts();
+
         if (snap.finished) {
             String nome = (snap.winner == null || snap.winner.isBlank()) ? "VENCEDOR" : snap.winner;
             drawVictoryImageOverlay(gc, nome.toUpperCase());
@@ -811,7 +830,11 @@ public class PixelBattleView {
         var before = engine.snapshot();
 
         if (a == Action.DEFEND) {
-            engine.perform(a);
+            var result = engine.perform(a);
+            // Cria efeito visual para defesa se necessário
+            if (result.event != null && result.event.isDefended) {
+                createVisualEffects(result.event);
+            }
             // Desbloqueia input após animação de defesa (tanto CPU quanto jogador)
             inputLocked = false;
             return;
@@ -951,6 +974,107 @@ public class PixelBattleView {
      * Carrega os sprites da CPU da pasta pc-characters.
      * Usa a configuração de frames específica do personagem se disponível.
      */
+    /**
+     * Carrega sprites do jogador 1 baseado no personagem escolhido.
+     */
+    private void loadPlayer1Sprites() {
+        // Obtém o personagem escolhido pelo jogador 1
+        br.puc.battledolls.model.CharacterClass charClass = null;
+        if (engine.getPlayer1() != null && engine.getPlayer1().robot() != null) {
+            charClass = engine.getPlayer1().robot().characterClass();
+        }
+
+        // Define os caminhos baseado no personagem
+        String basePath;
+        boolean useFolderStructure = false;
+
+        if (charClass == br.puc.battledolls.model.CharacterClass.SHINOBI) {
+            basePath = "/assets/characters/Shinobi";
+            useFolderStructure = true;
+        } else if (charClass == br.puc.battledolls.model.CharacterClass.BEATRIZ) {
+            basePath = "/assets/characters/r2";
+            useFolderStructure = false;
+        } else {
+            // YURI ou null - usa r1 (padrão)
+            basePath = "/assets/characters/r1";
+            useFolderStructure = false;
+        }
+
+        // Carrega sprites baseado na estrutura
+        if (useFolderStructure) {
+            // Estrutura de pasta (ex: Shinobi/Idle.png)
+            r1Idle = safeLoadSpriteSheet(basePath + "/Idle.png", 8, 1);
+            if (r1Idle == null)
+                r1Idle = new SpriteSheet("/assets/characters/r1_idle.png", 6, 1);
+            anim1Idle = new SpriteAnimator(r1Idle.columns(), idleFps1);
+
+            r1Atks = new SpriteSheet[3];
+            a1Atks = new SpriteAnimator[3];
+            for (int i = 0; i < 3; i++) {
+                r1Atks[i] = safeLoadSpriteSheet(basePath + "/Attack_" + (i + 1) + ".png", 4, 1);
+                if (r1Atks[i] == null)
+                    r1Atks[i] = new SpriteSheet("/assets/characters/r1_attack" + (i + 1) + ".png", 4, 1);
+                a1Atks[i] = new SpriteAnimator(r1Atks[i].columns(), atkFps1[i]);
+            }
+
+            r1Run = safeLoadSpriteSheet(basePath + "/Run.png", 8, 1);
+            if (r1Run == null)
+                r1Run = new SpriteSheet("/assets/characters/r1_run.png", 8, 1);
+            anim1Run = new SpriteAnimator(r1Run.columns(), runFps1);
+
+            // Shield.png para defend
+            r1Defend = safeLoadSpriteSheet(basePath + "/Shield.png", 2, 1);
+            if (r1Defend == null)
+                r1Defend = new SpriteSheet("/assets/characters/r1_defend.png", 2, 1);
+            anim1Defend = new SpriteAnimator(r1Defend.columns(), defendFps1);
+            durDef1 = r1Defend.columns() / defendFps1;
+
+            r1Hurt = safeLoadSpriteSheet(basePath + "/Hurt.png", 3, 1);
+            if (r1Hurt == null)
+                r1Hurt = new SpriteSheet("/assets/characters/r1_hurt.png", 3, 1);
+            anim1Hurt = new SpriteAnimator(r1Hurt.columns(), hurtFps1);
+            durHurt1 = r1Hurt.columns() / hurtFps1;
+
+            // Dead.png para death
+            r1Death = safeLoadSpriteSheet(basePath + "/Dead.png", 3, 1);
+            if (r1Death == null)
+                r1Death = new SpriteSheet("/assets/characters/r1_death.png", 3, 1);
+            anim1Death = new SpriteAnimator(r1Death.columns(), deathFps1);
+            durDeath1 = r1Death.columns() / deathFps1;
+
+        } else {
+            // Estrutura plana (ex: r1_idle.png)
+            r1Idle = new SpriteSheet(basePath + "_idle.png", 6, 1);
+            anim1Idle = new SpriteAnimator(r1Idle.columns(), idleFps1);
+
+            r1Atks = new SpriteSheet[] {
+                    new SpriteSheet(basePath + "_attack1.png", 4, 1),
+                    new SpriteSheet(basePath + "_attack2.png", 4, 1),
+                    new SpriteSheet(basePath + "_attack3.png", 4, 1)
+            };
+            a1Atks = new SpriteAnimator[] {
+                    new SpriteAnimator(r1Atks[0].columns(), atkFps1[0]),
+                    new SpriteAnimator(r1Atks[1].columns(), atkFps1[1]),
+                    new SpriteAnimator(r1Atks[2].columns(), atkFps1[2])
+            };
+
+            r1Run = new SpriteSheet(basePath + "_run.png", 8, 1);
+            anim1Run = new SpriteAnimator(r1Run.columns(), runFps1);
+
+            r1Defend = new SpriteSheet(basePath + "_defend.png", 2, 1);
+            anim1Defend = new SpriteAnimator(r1Defend.columns(), defendFps1);
+            durDef1 = r1Defend.columns() / defendFps1;
+
+            r1Hurt = new SpriteSheet(basePath + "_hurt.png", 3, 1);
+            anim1Hurt = new SpriteAnimator(r1Hurt.columns(), hurtFps1);
+            durHurt1 = r1Hurt.columns() / hurtFps1;
+
+            r1Death = new SpriteSheet(basePath + "_death.png", 3, 1);
+            anim1Death = new SpriteAnimator(r1Death.columns(), deathFps1);
+            durDeath1 = r1Death.columns() / deathFps1;
+        }
+    }
+
     private void loadCPUSprites(String spritePath) {
         // Usa configuração customizada se disponível, senão usa valores padrão
         br.puc.battledolls.campaign.CPUCharacter.SpriteFrameConfig config = cpuFrameConfig;
@@ -1035,5 +1159,137 @@ public class PixelBattleView {
             System.err.println("Erro ao carregar sprite: " + path + " - " + e.getMessage());
             return null;
         }
+    }
+
+    // =================== EFEITOS VISUAIS ===================
+
+    /**
+     * Cria efeitos visuais baseados no evento de batalha.
+     */
+    private void createVisualEffects(UiBattleEngine.BattleEvent event) {
+        // Determina a posição do defensor (onde mostrar os efeitos)
+        boolean defenderIsP1 = event.defenderName.equals(leftName);
+        double centerX = BASE_W / 2;
+        double defenderX = defenderIsP1 ? (centerX - GAP - 100) : (centerX + GAP + 100);
+        double defenderY = R_Y - 150; // Acima do sprite
+
+        if (event.isEvaded) {
+            // Efeito de esquiva
+            floatingTexts.add(new FloatingText("ESQUIVOU!", defenderX, defenderY,
+                    Color.web("#00FFFF"), false));
+        } else if (event.damage > 0) {
+            // Dano normal ou crítico - design simplificado
+            String damageText = String.valueOf(event.damage);
+
+            if (event.isCritical) {
+                // ===== CRÍTICO - Compacto mas impactante =====
+
+                // 1. ESPECIAL no topo (se houver)
+                if (event.isSpecial) {
+                    floatingTexts.add(new FloatingText("ESPECIAL", defenderX, defenderY - 90,
+                            Color.web("#FF00FF"), false));
+                }
+
+                // 2. "CRÍTICO!" bem acima
+                floatingTexts.add(new FloatingText("CRÍTICO!", defenderX, defenderY - 55,
+                        Color.web("#FF6600"), true));
+
+                // 3. Valor do dano grande
+                floatingTexts.add(new FloatingText(damageText, defenderX, defenderY,
+                        Color.web("#FFAA00"), true));
+
+                // 4. DEFENDIDO se aplicável
+                if (event.isDefended) {
+                    floatingTexts.add(new FloatingText("DEFENDIDO", defenderX, defenderY + 55,
+                            Color.web("#4488FF"), false));
+                }
+
+                // 5. SANGRAMENTO se aplicável
+                if (event.isBleeding) {
+                    floatingTexts.add(new FloatingText("SANGRAMENTO", defenderX, defenderY + 90,
+                            Color.web("#FF0044"), false));
+                }
+
+            } else {
+                // ===== NORMAL - Simples e limpo =====
+                Color damageColor = Color.web("#FF4444");
+
+                // 1. ESPECIAL no topo (se houver)
+                if (event.isSpecial) {
+                    floatingTexts.add(new FloatingText("ESPECIAL", defenderX, defenderY - 50,
+                            Color.web("#FF00FF"), false));
+                }
+
+                // 2. Valor do dano
+                floatingTexts.add(new FloatingText(damageText, defenderX, defenderY,
+                        damageColor, false));
+
+                // 3. DEFENDIDO se aplicável
+                if (event.isDefended) {
+                    floatingTexts.add(new FloatingText("DEFENDIDO", defenderX, defenderY + 45,
+                            Color.web("#4488FF"), false));
+                }
+
+                // 4. SANGRAMENTO se aplicável
+                if (event.isBleeding) {
+                    floatingTexts.add(new FloatingText("SANGRAMENTO", defenderX, defenderY + 80,
+                            Color.web("#FF0044"), false));
+                }
+            }
+        }
+    }
+
+    /**
+     * Atualiza a animação dos textos flutuantes.
+     */
+    private void updateFloatingTexts(double dt) {
+        floatingTexts.removeIf(ft -> {
+            ft.t += dt * 1.5; // velocidade da animação
+            return ft.t >= 1.0; // remove quando completa
+        });
+    }
+
+    /**
+     * Desenha os textos flutuantes na tela.
+     */
+    private void drawFloatingTexts() {
+        for (FloatingText ft : floatingTexts) {
+            // Calcula posição com movimento para cima e fade out
+            double progress = ft.t; // 0 → 1
+            double offsetY = -progress * 80; // move 80px para cima
+            double alpha = 1.0 - progress; // fade out
+            double growthFactor = ft.isCritical ? 0.15 : 0.25;
+            double currentScale = ft.scale * (1.0 + progress * growthFactor); // cresce um pouco
+
+            // Posição final
+            double x = ft.x;
+            double y = ft.y + offsetY;
+
+            // Configura fonte
+            int fontSize = (int) (ft.baseFontSize * currentScale);
+            gc.setFont(Font.font("Impact", fontSize));
+
+            // Sombra
+            gc.setGlobalAlpha(alpha * 0.7);
+            gc.setFill(Color.BLACK);
+            gc.fillText(ft.text, x + 3, y + 3);
+
+            // Texto principal
+            gc.setGlobalAlpha(alpha);
+            gc.setFill(ft.color);
+            gc.fillText(ft.text, x, y);
+
+            // Brilho para críticos
+            if (ft.isCritical && progress < 0.5) {
+                double glowAlpha = alpha * 0.5 * (1.0 - progress * 2);
+                gc.setGlobalAlpha(glowAlpha);
+                gc.setFill(Color.web("#FFD700"));
+                Glow glow = new Glow(0.8);
+                gc.setEffect(glow);
+                gc.fillText(ft.text, x, y);
+                gc.setEffect(null);
+            }
+        }
+        gc.setGlobalAlpha(1.0);
     }
 }

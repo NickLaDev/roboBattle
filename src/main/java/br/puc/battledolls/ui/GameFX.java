@@ -759,7 +759,8 @@ public class GameFX extends Application {
 
     private void showBattleScreen(boolean isCampaign) {
         engine = new UiBattleEngine(p1, p2, gameMode == GameMode.PVC);
-        // Se for campanha, passa o caminho dos sprites da CPU e a configuração de frames
+        // Se for campanha, passa o caminho dos sprites da CPU e a configuração de
+        // frames
         String cpuSpritePath = null;
         br.puc.battledolls.campaign.CPUCharacter.SpriteFrameConfig cpuFrameConfig = null;
         if (isCampaign && campaignManager != null) {
@@ -877,11 +878,11 @@ public class GameFX extends Application {
                 } else {
                     setText(item.displayName() + " — " + item.ability().name());
                     setStyle("""
-                            -fx-background-color: rgba(30,30,40,0.95);
-                            -fx-text-fill: #EDE9FE;
-                            -fx-padding: 8 12 8 12;
-                            -fx-font-size: 14px;
-                        """);
+                                -fx-background-color: rgba(30,30,40,0.95);
+                                -fx-text-fill: #EDE9FE;
+                                -fx-padding: 8 12 8 12;
+                                -fx-font-size: 14px;
+                            """);
                 }
             }
         });
@@ -917,14 +918,15 @@ public class GameFX extends Application {
 
         // Container para a imagem com borda brilhante
         StackPane portraitContainer = new StackPane(portrait);
-        portraitContainer.setStyle("""
-                    -fx-background-color: linear-gradient(to bottom right, rgba(167,139,250,0.15), rgba(88,28,135,0.15));
-                    -fx-background-radius: 20;
-                    -fx-border-color: linear-gradient(to bottom right, #BB86FC, #A78BFA);
-                    -fx-border-width: 3;
-                    -fx-border-radius: 20;
-                    -fx-padding: 20;
-                """);
+        portraitContainer.setStyle(
+                """
+                            -fx-background-color: linear-gradient(to bottom right, rgba(167,139,250,0.15), rgba(88,28,135,0.15));
+                            -fx-background-radius: 20;
+                            -fx-border-color: linear-gradient(to bottom right, #BB86FC, #A78BFA);
+                            -fx-border-width: 3;
+                            -fx-border-radius: 20;
+                            -fx-padding: 20;
+                        """);
         portraitContainer.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
 
         // Nome da habilidade - destacado

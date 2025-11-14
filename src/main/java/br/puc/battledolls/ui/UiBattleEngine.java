@@ -48,9 +48,42 @@ public class UiBattleEngine {
     public static class StepResult {
         public final List<String> logs = new ArrayList<>();
         public final Snapshot snapshot;
+        public final BattleEvent event; // Evento visual do último ataque
 
-        StepResult(Snapshot s) {
+        StepResult(Snapshot s, BattleEvent event) {
             this.snapshot = s;
+            this.event = event;
+        }
+    }
+    
+    /**
+     * Representa um evento visual que aconteceu na batalha.
+     */
+    public static class BattleEvent {
+        public final boolean isCritical;
+        public final boolean isEvaded;
+        public final boolean isDefended;
+        public final boolean isSpecial;
+        public final boolean isBleeding;
+        public final int damage;
+        public final String attackerName;
+        public final String defenderName;
+        
+        public BattleEvent(boolean isCritical, boolean isEvaded, boolean isDefended, 
+                          boolean isSpecial, boolean isBleeding, int damage,
+                          String attackerName, String defenderName) {
+            this.isCritical = isCritical;
+            this.isEvaded = isEvaded;
+            this.isDefended = isDefended;
+            this.isSpecial = isSpecial;
+            this.isBleeding = isBleeding;
+            this.damage = damage;
+            this.attackerName = attackerName;
+            this.defenderName = defenderName;
+        }
+        
+        public static BattleEvent none() {
+            return new BattleEvent(false, false, false, false, false, 0, "", "");
         }
     }
 
@@ -130,8 +163,10 @@ public class UiBattleEngine {
 
     public StepResult perform(Action action) {
         List<String> logs = new ArrayList<>();
+        BattleEvent event = BattleEvent.none();
+        
         if (finished)
-            return pack(logs);
+            return pack(logs, event);
 
         // Tick de sangramento no INÍCIO do turno do current
         int bleedTick = current.robot().tickBleed();
@@ -140,7 +175,7 @@ public class UiBattleEngine {
                     current.name(), bleedTick, current.robot().getHp()));
             if (!current.robot().isAlive()) {
                 finish(enemy.name(), logs);
-                return pack(logs);
+                return pack(logs, event);
             }
         }
 
@@ -154,17 +189,21 @@ public class UiBattleEngine {
             }
             case ATTACK, SPECIAL -> {
                 boolean useSpecial = (action == Action.SPECIAL) && current.robot().consumeSpecial();
+                boolean wasGuarding = enemy.robot().isGuarding();
                 DamageResult res = calc.compute(current.robot(), enemy.robot(), useSpecial);
 
                 if (res.evaded) {
                     logs.add(String.format("%s atacou, mas %s ESQUIVOU! (0 dano)", current.name(), enemy.name()));
+                    event = new BattleEvent(false, true, false, useSpecial, false, 0, current.name(), enemy.name());
                 } else {
                     int dmg = res.finalDamage;
+                    boolean wasDefended = false;
 
-                    if (enemy.robot().isGuarding()) {
+                    if (wasGuarding) {
                         int original = dmg;
                         dmg = Math.max(1, (int) Math.round(dmg * 0.5));
                         enemy.robot().clearGuard();
+                        wasDefended = true;
                         logs.add(String.format("(GUARDA) Dano reduzido de %d para %d.", original, dmg));
                     }
 
@@ -175,17 +214,22 @@ public class UiBattleEngine {
                             (useSpecial ? " (SPECIAL!)" : ""),
                             enemy.name(), enemy.robot().getHp()));
 
+                    boolean appliedBleed = false;
                     if (res.applyBleed && enemy.robot().isAlive()) {
                         enemy.robot().applyBleed(2, 3);
+                        appliedBleed = true;
                         logs.add(String.format("(SANGRAMENTO) %s foi afligido por 2 turnos.", enemy.name()));
                     }
+                    
+                    event = new BattleEvent(res.critical, false, wasDefended, useSpecial, 
+                                          appliedBleed, dmg, current.name(), enemy.name());
                 }
             }
         }
 
         if (!enemy.robot().isAlive()) {
             finish(current.name(), logs);
-            return pack(logs);
+            return pack(logs, event);
         }
 
         // troca turno
@@ -193,7 +237,7 @@ public class UiBattleEngine {
         current = enemy;
         enemy = tmp;
         round++;
-        return pack(logs);
+        return pack(logs, event);
     }
 
     private void finish(String winner, List<String> logs) {
@@ -202,8 +246,8 @@ public class UiBattleEngine {
         logs.add("\n*** VENCEDOR: " + winner + " ***");
     }
 
-    private StepResult pack(List<String> logs) {
-        StepResult sr = new StepResult(snapshot());
+    private StepResult pack(List<String> logs, BattleEvent event) {
+        StepResult sr = new StepResult(snapshot(), event);
         sr.logs.addAll(logs);
         return sr;
     }
