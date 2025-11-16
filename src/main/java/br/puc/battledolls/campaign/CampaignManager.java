@@ -1,11 +1,13 @@
 package br.puc.battledolls.campaign;
 
 import br.puc.battledolls.ai.CPURobotBuilder;
+import br.puc.battledolls.items.Potion;
 import br.puc.battledolls.model.Player;
 import br.puc.battledolls.model.Robot;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 /**
  * Gerencia a campanha PvC, incluindo fases, progresso e recompensas.
@@ -186,6 +188,59 @@ public class CampaignManager {
 
         Player cpuPlayer = new Player(phase.cpuCharacter().name(), 0);
         cpuPlayer.buyAndEquip(phase.cpuRobot(), 0);
+
+        // Adiciona poções para a CPU baseado na fase
+        equipCPUWithPotions(cpuPlayer, currentPhaseIndex);
+
         return cpuPlayer;
+    }
+
+    /**
+     * Equipa a CPU com poções baseado na dificuldade da fase.
+     */
+    private void equipCPUWithPotions(Player cpuPlayer, int phaseIndex) {
+        Random rng = new Random();
+
+        // Aumenta quantidade e qualidade das poções conforme a fase avança
+        int baseQuantity = 1 + phaseIndex; // Fase 0 = 1, Fase 1 = 2, etc.
+        int maxLevel = Math.min(5, 2 + phaseIndex); // Fase 0 = nível 2, aumenta gradualmente
+
+        // Adiciona poções de vida (sempre)
+        int vidaCount = baseQuantity;
+        int vidaLevel = Math.min(maxLevel, 1 + phaseIndex);
+        for (int i = 0; i < vidaCount; i++) {
+            Potion vidaPotion = new Potion(Potion.Type.VIDA, vidaLevel);
+            cpuPlayer.addPotionDirectly(vidaPotion);
+        }
+
+        // Adiciona poções de barreira (50% de chance por fase)
+        if (phaseIndex >= 1 && rng.nextBoolean()) {
+            int barreraCount = 1 + (phaseIndex / 2);
+            int barreraLevel = Math.min(maxLevel, phaseIndex);
+            for (int i = 0; i < barreraCount; i++) {
+                Potion barreraPotion = new Potion(Potion.Type.BARRERA, Math.max(1, barreraLevel));
+                cpuPlayer.addPotionDirectly(barreraPotion);
+            }
+        }
+
+        // Adiciona poções de energia (a partir da fase 2)
+        if (phaseIndex >= 2) {
+            int energiaCount = 1 + (phaseIndex / 3);
+            int energiaLevel = Math.min(maxLevel, phaseIndex - 1);
+            for (int i = 0; i < energiaCount; i++) {
+                Potion energiaPotion = new Potion(Potion.Type.ENERGIA, Math.max(1, energiaLevel));
+                cpuPlayer.addPotionDirectly(energiaPotion);
+            }
+        }
+
+        // Adiciona poções de fúria (a partir da fase 3)
+        if (phaseIndex >= 3) {
+            int furiaCount = 1 + (phaseIndex / 4);
+            int furiaLevel = Math.min(maxLevel, phaseIndex - 2);
+            for (int i = 0; i < furiaCount; i++) {
+                Potion furiaPotion = new Potion(Potion.Type.FURIA, Math.max(1, furiaLevel));
+                cpuPlayer.addPotionDirectly(furiaPotion);
+            }
+        }
     }
 }

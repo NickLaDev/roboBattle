@@ -3,6 +3,7 @@ package br.puc.battledolls.ui;
 import br.puc.battledolls.combat.Action;
 import br.puc.battledolls.combat.DamageCalculator;
 import br.puc.battledolls.combat.DamageResult;
+import br.puc.battledolls.items.Potion;
 import br.puc.battledolls.model.Player;
 
 import java.util.ArrayList;
@@ -17,6 +18,7 @@ public class UiBattleEngine {
         public final boolean currentGuarding, enemyGuarding;
         public final boolean currentBleeding, enemyBleeding;
         public final boolean currentSpecial, enemySpecial;
+        public final int currentSpecialCharge, enemySpecialCharge;
         public final int round;
         public final boolean finished;
         public final String winner;
@@ -26,6 +28,7 @@ public class UiBattleEngine {
                 boolean currentGuarding, boolean enemyGuarding,
                 boolean currentBleeding, boolean enemyBleeding,
                 boolean currentSpecial, boolean enemySpecial,
+                int currentSpecialCharge, int enemySpecialCharge,
                 int round, boolean finished, String winner) {
             this.currentName = currentName;
             this.enemyName = enemyName;
@@ -39,6 +42,8 @@ public class UiBattleEngine {
             this.enemyBleeding = enemyBleeding;
             this.currentSpecial = currentSpecial;
             this.enemySpecial = enemySpecial;
+            this.currentSpecialCharge = currentSpecialCharge;
+            this.enemySpecialCharge = enemySpecialCharge;
             this.round = round;
             this.finished = finished;
             this.winner = winner;
@@ -158,6 +163,7 @@ public class UiBattleEngine {
                 current.robot().isGuarding(), enemy.robot().isGuarding(),
                 current.robot().isBleeding(), enemy.robot().isBleeding(),
                 current.robot().isSpecialAvailable(), enemy.robot().isSpecialAvailable(),
+                current.robot().getSpecialCharge(), enemy.robot().getSpecialCharge(),
                 round, finished, winnerName);
     }
 
@@ -167,6 +173,9 @@ public class UiBattleEngine {
         
         if (finished)
             return pack(logs, event);
+
+        // Atualiza efeitos temporários (fúria) no início do turno
+        current.robot().tickTemporaryEffects();
 
         // Tick de sangramento no INÍCIO do turno do current
         int bleedTick = current.robot().tickBleed();
@@ -182,9 +191,55 @@ public class UiBattleEngine {
         logs.add(String.format("[Round %d] %s (%d HP) vs %s (%d HP)",
                 round, p1.name(), p1.robot().getHp(), p2.name(), p2.robot().getHp()));
 
+        boolean isDefending = false;
         switch (action) {
+            case USE_POTION -> {
+                Potion potion = action.getPotion();
+                if (potion == null || !current.usePotion(potion)) {
+                    logs.add(current.name() + " tentou usar uma poção, mas não possui.");
+                    return pack(logs, event);
+                }
+                
+                // Aplica efeito da poção
+                switch (potion.type()) {
+                    case VIDA -> {
+                        int heal = potion.getHealAmount();
+                        current.robot().heal(heal);
+                        logs.add(String.format("%s usou %s e recuperou %d HP! HP atual: %d",
+                            current.name(), potion.getDisplayName(), heal, current.robot().getHp()));
+                        event = new BattleEvent(false, false, false, false, false, -heal, 
+                            current.name(), current.name()); // negativo indica cura
+                    }
+                    case BARRERA -> {
+                        int shield = potion.getShieldAmount();
+                        current.robot().addShield(shield);
+                        logs.add(String.format("%s usou %s e ganhou %d de escudo!",
+                            current.name(), potion.getDisplayName(), shield));
+                        event = new BattleEvent(false, false, false, false, false, -shield - 1000, 
+                            current.name(), current.name()); // -1000+ indica escudo
+                    }
+                    case ENERGIA -> {
+                        int energy = potion.getEnergyAmount();
+                        current.robot().addSpecialChargeAmount(energy);
+                        logs.add(String.format("%s usou %s e ganhou %d de carga especial! Carga: %d/100",
+                            current.name(), potion.getDisplayName(), energy, current.robot().getSpecialCharge()));
+                        event = new BattleEvent(false, false, false, false, false, -energy - 2000, 
+                            current.name(), current.name()); // -2000+ indica energia
+                    }
+                    case FURIA -> {
+                        double multiplier = potion.getFuryMultiplier();
+                        int duration = potion.getFuryDuration();
+                        current.robot().applyFury(multiplier, duration);
+                        logs.add(String.format("%s usou %s! Ataque aumentado em %.0f%% por %d turnos!",
+                            current.name(), potion.getDisplayName(), (multiplier - 1.0) * 100, duration));
+                        event = new BattleEvent(false, false, false, false, false, -3000, 
+                            current.name(), current.name()); // -3000 indica fúria
+                    }
+                }
+            }
             case DEFEND -> {
                 current.robot().setGuarding(true);
+                isDefending = true;
                 logs.add(current.name() + " adotou postura DEFENSIVA (−50% no próximo dano).");
             }
             case ATTACK, SPECIAL -> {
@@ -230,6 +285,17 @@ public class UiBattleEngine {
         if (!enemy.robot().isAlive()) {
             finish(current.name(), logs);
             return pack(logs, event);
+        }
+
+        // Adiciona carga ao especial do jogador atual
+        current.robot().addSpecialCharge(isDefending);
+        int chargeGained = isDefending ? 40 : 20;
+        int newCharge = current.robot().getSpecialCharge();
+        if (newCharge >= 100) {
+            logs.add(String.format("(ESPECIAL CARREGADO!) %s está pronto para usar o ataque especial!", current.name()));
+        } else {
+            logs.add(String.format("(CARGA) %s ganhou %d de carga especial. Total: %d/100",
+                current.name(), chargeGained, newCharge));
         }
 
         // troca turno

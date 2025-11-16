@@ -2,6 +2,7 @@ package br.puc.battledolls.ui;
 
 import br.puc.battledolls.campaign.CampaignManager;
 import br.puc.battledolls.items.Armor;
+import br.puc.battledolls.items.Potion;
 import br.puc.battledolls.items.Weapon;
 import br.puc.battledolls.model.Player;
 import br.puc.battledolls.model.Robot;
@@ -68,12 +69,14 @@ public class GameFX extends Application {
     public static class Purchase {
         public final Robot robot;
         public final int totalCost;
+        public final int creditCost;
         public final CharacterClass character;
 
-        public Purchase(CharacterClass character, Robot robot, int totalCost) {
+        public Purchase(CharacterClass character, Robot robot, int totalCost, int creditCost) {
             this.character = character;
             this.robot = robot;
             this.totalCost = totalCost;
+            this.creditCost = creditCost;
         }
     }
 
@@ -309,6 +312,11 @@ public class GameFX extends Application {
                     : ((tf2.getText() == null || tf2.getText().isBlank()) ? "Jogador 2" : tf2.getText().trim());
             p1 = new Player(n1, START_CREDITS);
             p2 = new Player(n2, START_CREDITS);
+            if (gameMode == GameMode.PVC) {
+                campaignManager = new CampaignManager(p1);
+            } else {
+                campaignManager = null;
+            }
             showShopScreen(p1, true);
         };
         enterBtn.setOnAction(e -> submit.run());
@@ -362,6 +370,9 @@ public class GameFX extends Application {
 
     private void showShopScreen(Player player, boolean isFirstPlayer, boolean isUpgrade) {
         final int credits = player.credits();
+        final Robot baselineRobot = isUpgrade ? player.robot() : null;
+        final int existingCost = equipmentCost(baselineRobot);
+        final int effectiveBudget = credits + existingCost;
 
         // seleção
         ObjectProperty<CharacterClass> characterPick = new SimpleObjectProperty<>(CharacterClass.BEATRIZ);
@@ -369,12 +380,10 @@ public class GameFX extends Application {
         int currentWeaponLvl = 0;
         int currentArmorLvl = 0;
         if (isUpgrade && player.robot() != null) {
-            // Estima os níveis baseado nas stats (aproximação)
-            var stats = player.robot().stats();
-            // Arma: ATK base é 10, cada nível adiciona 6, então (atk - 10) / 6
-            currentWeaponLvl = Math.max(0, Math.min(5, (stats.atk - 10) / 6));
-            // Armadura: DEF base é 5, cada nível adiciona 4, então (def - 5) / 4
-            currentArmorLvl = Math.max(0, Math.min(5, (stats.def - 5) / 4));
+            if (player.robot().weapon() != null)
+                currentWeaponLvl = player.robot().weapon().getLevel();
+            if (player.robot().armor() != null)
+                currentArmorLvl = player.robot().armor().getLevel();
             characterPick.set(player.robot().characterClass());
         }
         IntegerProperty weaponLvl = new SimpleIntegerProperty(currentWeaponLvl);
@@ -412,11 +421,11 @@ public class GameFX extends Application {
         // ====== strips (com preço no tile) ======
         StripControl swords = itemStrip(
                 "ESPADAS", SWORD_FMT, "Sem arma", weaponLvl,
-                () -> credits - armorCost.applyAsInt(armorLvl.get()),
+                () -> effectiveBudget - armorCost.applyAsInt(armorLvl.get()),
                 weaponCost);
         StripControl shields = itemStrip(
                 "ESCUDOS", SHIELD_FMT, "Sem escudo", armorLvl,
-                () -> credits - weaponCost.applyAsInt(weaponLvl.get()),
+                () -> effectiveBudget - weaponCost.applyAsInt(weaponLvl.get()),
                 armorCost);
         // cross-refresh (quando um muda, recalcula acessibilidade do outro)
         weaponLvl.addListener((o, a, b) -> shields.refresh.run());
@@ -460,41 +469,40 @@ public class GameFX extends Application {
 
         // ====== barra inferior ======
         Label lblCred = bold("Créditos: " + credits);
-        lblCred.setMinWidth(120);
+        lblCred.setMinWidth(140);
         lblCred.setTextFill(Color.web("#EDE9FE"));
+        if (isUpgrade && existingCost > 0) {
+            lblCred.setText(String.format("Créditos: %d (reaproveita %d)", credits, existingCost));
+        }
 
-        Label lblSubtotal = new Label("Subtotal: 0");
-        lblSubtotal.setMinWidth(120);
+        Label lblSubtotal = new Label();
+        lblSubtotal.setMinWidth(150);
         lblSubtotal.setTextFill(Color.web("#EDE9FE"));
 
-        Label lblSaldo = new Label("Saldo pós-compra: " + credits);
-        lblSaldo.setMinWidth(180);
+        Label lblInvest = new Label();
+        lblInvest.setMinWidth(180);
+        lblInvest.setTextFill(Color.web("#EDE9FE"));
+
+        Label lblSaldo = new Label();
+        lblSaldo.setMinWidth(190);
         lblSaldo.setTextFill(Color.web("#EDE9FE"));
 
         Button btnPreview = primaryButton("Pré-visualizar");
         Button btnConfirm = primaryButton(isUpgrade ? "Confirmar Upgrade" : "Confirmar compra");
 
-        // Adiciona label mostrando fase atual se for upgrade
-        Label phaseLabel = null;
-        if (isUpgrade && campaignManager != null) {
-            var currentPhase = campaignManager.getCurrentPhase();
-            if (currentPhase != null) {
-                phaseLabel = new Label(String.format("Fase %d/%d - Próximo: %s",
-                        campaignManager.getCurrentPhaseNumber(),
-                        campaignManager.getTotalPhases(),
-                        currentPhase.cpuCharacter().name()));
-                phaseLabel.setTextFill(Color.web("#BB86FC"));
-                phaseLabel.setStyle("-fx-font-size: 16px; -fx-font-weight: bold;");
-                phaseLabel.setMinWidth(250);
-            }
-        }
-
         Label lblAbility = new Label();
         lblAbility.setTextFill(Color.web("#EDE9FE"));
         lblAbility.setMinWidth(200);
 
-        HBox bottom = new HBox(16, btnPreview, new Region(), lblCred, lblSubtotal, lblSaldo,
-                phaseLabel != null ? phaseLabel : lblAbility, btnConfirm);
+        Node progressionNode = (gameMode == GameMode.PVC && campaignManager != null)
+                ? buildCampaignPhaseCard()
+                : lblAbility;
+        if (progressionNode == null) {
+            progressionNode = lblAbility;
+        }
+
+        HBox bottom = new HBox(16, btnPreview, new Region(), lblCred, lblSubtotal, lblInvest, lblSaldo,
+                progressionNode, btnConfirm);
         HBox.setHgrow(bottom.getChildren().get(1), Priority.ALWAYS);
         bottom.setAlignment(Pos.CENTER_LEFT);
         bottom.setPadding(new Insets(10));
@@ -518,9 +526,15 @@ public class GameFX extends Application {
         // ====== lógica do resumo ======
         Runnable refreshSummary = () -> {
             int sub = weaponCost.applyAsInt(weaponLvl.get()) + armorCost.applyAsInt(armorLvl.get());
-            lblSubtotal.setText("Subtotal: " + sub);
-            int saldo = credits - sub;
-            lblSaldo.setText("Saldo pós-compra: " + saldo);
+            lblSubtotal.setText("Valor do loadout: " + sub);
+            int delta = Math.max(0, sub - existingCost);
+            if (isUpgrade) {
+                lblInvest.setText("Investimento adicional: " + delta);
+            } else {
+                lblInvest.setText("Total a pagar: " + sub);
+            }
+            int saldo = credits - (isUpgrade ? delta : sub);
+            lblSaldo.setText((isUpgrade ? "Saldo após upgrade: " : "Saldo pós-compra: ") + saldo);
             lblSaldo.setTextFill(saldo < 0 ? Color.web("#F87171") : Color.web("#EDE9FE"));
             CharacterClass cc = characterPick.get();
             AbilityEffect ability = cc.ability();
@@ -535,54 +549,221 @@ public class GameFX extends Application {
 
         btnPreview.setOnAction(e -> {
             Purchase p = buildPurchase(credits, characterPick.get(), weaponLvl.get(), armorLvl.get(), weaponCost,
-                    armorCost);
+                    armorCost, baselineRobot);
             if (p == null) {
                 alert("Créditos insuficientes para esta configuração.");
                 return;
             }
             alert(String.format(
-                    "Personagem: %s\nHabilidade: %s\nHP=%d  ATK=%d  DEF=%d  CRIT=%.1f%%  EVADE=%.1f%%  Cargas de especial=%d",
+                    "Personagem: %s\nHabilidade: %s\nHP=%d  ATK=%d  DEF=%d  CRIT=%.1f%%  EVADE=%.1f%%  Cargas de especial=%d\n%s",
                     p.character.displayName(),
                     p.character.ability().name(),
                     p.robot.stats().maxHp, p.robot.stats().atk, p.robot.stats().def,
                     p.robot.stats().crit * 100, p.robot.stats().evade * 100,
-                    p.robot.specialCharges()));
+                    p.robot.specialCharges(),
+                    isUpgrade
+                            ? ("Investimento adicional: " + p.creditCost + " cr")
+                            : ("Custo total: " + p.totalCost + " cr")));
         });
 
         btnConfirm.setOnAction(e -> {
             Purchase p = buildPurchase(credits, characterPick.get(), weaponLvl.get(), armorLvl.get(), weaponCost,
-                    armorCost);
+                    armorCost, baselineRobot);
             if (p == null) {
                 alert("Créditos insuficientes para esta configuração.");
                 return;
             }
-            if (!player.buyAndEquip(p.robot, p.totalCost)) {
+            if (!player.buyAndEquip(p.robot, p.creditCost)) {
                 alert("Falha ao equipar. Tente novamente.");
                 return;
             }
 
-            // Se for upgrade, vai para a próxima fase
+            // Se for upgrade, mostra loja de poções antes da próxima fase
             if (isUpgrade) {
-                startCampaignPhase();
+                showUpgradePotionScreen();
                 return;
             }
 
             if (isFirstPlayer) {
                 pur1 = p;
-                // No modo PvC, inicia a campanha
-                if (gameMode == GameMode.PVC) {
-                    campaignManager = new CampaignManager(p1);
-                    startCampaignPhase();
-                } else {
-                    showShopScreen(p2, false);
-                }
+                // Tanto PvP quanto PvC mostram loja de poções para o jogador 1
+                showPotionShopScreen(p1, true);
             } else {
                 pur2 = p;
-                showBattleScreen();
+                // Após jogador 2 comprar equipamentos, mostra loja de poções para ele
+                showPotionShopScreen(p2, false);
             }
         });
 
         // ====== cena com escalonamento automático do tabuleiro ======
+        StackPane root = new StackPane(board);
+        root.setStyle("-fx-background-color: black;");
+        Scene scene = new Scene(root, 1160, 700);
+
+        Runnable rescale = () -> {
+            double s = Math.min(scene.getWidth() / IMG_W, scene.getHeight() / IMG_H);
+            board.setScaleX(s);
+            board.setScaleY(s);
+        };
+        scene.widthProperty().addListener((o, a, b) -> rescale.run());
+        scene.heightProperty().addListener((o, a, b) -> rescale.run());
+        rescale.run();
+
+        stage.setScene(scene);
+    }
+
+    // =========================================================
+    // 2.5) LOJA DE POÇÕES
+    // =========================================================
+    private void showPotionShopScreen(Player player, boolean isFirstPlayer) {
+        final int credits = player.credits();
+
+        // Fundo
+        Image bgImg = load(SHOP_BG);
+        final double IMG_W = bgImg.getWidth();
+        final double IMG_H = bgImg.getHeight();
+
+        Pane board = new Pane();
+        board.setPrefSize(IMG_W, IMG_H);
+        board.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setBackground(new Background(new BackgroundImage(
+                bgImg, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER, new BackgroundSize(IMG_W, IMG_H, false, false, false, false))));
+
+        // Título
+        Label title = new Label("LOJA DE POÇÕES - " + player.name().toUpperCase());
+        title.setTextFill(Color.web("#BB86FC"));
+        title.setStyle("-fx-font-size: 28px; -fx-font-weight: bold;");
+        DropShadow titleGlow = new DropShadow(30, Color.web("#BB86FC"));
+        titleGlow.setSpread(0.3);
+        title.setEffect(titleGlow);
+        placePct(title, 0.5, 0.05, 0.4, 0.08, IMG_W, IMG_H);
+        title.setAlignment(Pos.CENTER);
+
+        // Grid de poções (4 tipos x 5 níveis)
+        VBox potionGrid = new VBox(15);
+        potionGrid.setAlignment(Pos.CENTER);
+
+        for (Potion.Type type : Potion.Type.values()) {
+            HBox typeRow = new HBox(10);
+            typeRow.setAlignment(Pos.CENTER);
+
+            // Label do tipo
+            Label typeLabel = new Label(type.displayName() + ":");
+            typeLabel.setTextFill(Color.web("#EDE9FE"));
+            typeLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
+            typeLabel.setPrefWidth(120);
+            typeRow.getChildren().add(typeLabel);
+
+            // Botões para cada nível (1-5)
+            for (int level = 1; level <= 5; level++) {
+                Potion potion = new Potion(type, level);
+                int cost = potion.getCost();
+                int count = player.getPotionCount(potion);
+
+                Button btn = new Button();
+                btn.setPrefSize(80, 100);
+                btn.setStyle("-fx-background-color: rgba(30,30,30,0.9); -fx-background-radius: 8;");
+
+                VBox btnContent = new VBox(5);
+                btnContent.setAlignment(Pos.CENTER);
+
+                // Ícone da poção
+                ImageView icon = new ImageView();
+                try {
+                    Image potionImg = load(potion.getSpritePath());
+                    if (potionImg != null) {
+                        icon.setImage(potionImg);
+                        icon.setFitWidth(50);
+                        icon.setFitHeight(50);
+                        icon.setPreserveRatio(true);
+                    }
+                } catch (Exception e) {
+                    // Fallback se não carregar
+                }
+
+                Label levelLabel = new Label("Nv." + level);
+                levelLabel.setTextFill(Color.web("#EDE9FE"));
+                levelLabel.setStyle("-fx-font-size: 12px;");
+
+                Label costLabel = new Label(cost + "c");
+                costLabel.setTextFill(Color.web("#FFD700"));
+                costLabel.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
+
+                Label countLabel = new Label("x" + count);
+                countLabel.setTextFill(Color.web("#60A5FA"));
+                countLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
+
+                btnContent.getChildren().addAll(icon, levelLabel, costLabel, countLabel);
+                btn.setGraphic(btnContent);
+
+                // Desabilita se não tiver créditos
+                boolean canAfford = credits >= cost;
+                btn.setDisable(!canAfford);
+                if (!canAfford) {
+                    btn.setOpacity(0.5);
+                }
+
+                // Tooltip com descrição
+                String tooltipText = switch (type) {
+                    case VIDA -> String.format("Recupera %d HP", potion.getHealAmount());
+                    case BARRERA -> String.format("Adiciona %d de escudo", potion.getShieldAmount());
+                    case ENERGIA -> String.format("Adiciona %d de carga especial", potion.getEnergyAmount());
+                    case FURIA -> String.format("Aumenta ataque em %.0f%% por %d turnos",
+                            (potion.getFuryMultiplier() - 1.0) * 100, potion.getFuryDuration());
+                };
+                Tooltip tooltip = new Tooltip(tooltipText + "\nCusto: " + cost + " créditos");
+                Tooltip.install(btn, tooltip);
+
+                btn.setOnAction(e -> {
+                    if (player.buyPotion(potion)) {
+                        // Atualiza a tela
+                        showPotionShopScreen(player, isFirstPlayer);
+                    } else {
+                        alert("Créditos insuficientes!");
+                    }
+                });
+
+                typeRow.getChildren().add(btn);
+            }
+
+            potionGrid.getChildren().add(typeRow);
+        }
+
+        // Barra inferior
+        Label lblCred = bold("Créditos: " + player.credits());
+        lblCred.setTextFill(Color.web("#EDE9FE"));
+
+        Button btnContinue = primaryButton("Continuar");
+        btnContinue.setOnAction(e -> {
+            if (isFirstPlayer) {
+                // No modo PvP, vai para loja do jogador 2
+                if (gameMode == GameMode.PVP) {
+                    showShopScreen(p2, false);
+                } else {
+                    // No modo PvC, inicia a campanha
+                    startCampaignPhase();
+                }
+            } else {
+                // Após jogador 2 comprar poções, inicia a batalha
+                showBattleScreen();
+            }
+        });
+
+        HBox bottom = new HBox(16, new Region(), lblCred, btnContinue);
+        HBox.setHgrow(bottom.getChildren().get(0), Priority.ALWAYS);
+        bottom.setAlignment(Pos.CENTER_LEFT);
+        bottom.setPadding(new Insets(10));
+        bottom.setStyle("-fx-background-color: rgba(0,0,0,0.38); -fx-background-radius: 14;");
+
+        VBox centerBox = new VBox(20, potionGrid, bottom);
+        centerBox.setAlignment(Pos.CENTER);
+
+        board.getChildren().addAll(title, centerBox);
+        placePct(centerBox, 0.1, 0.15, 0.8, 0.75, IMG_W, IMG_H);
+
+        // Cena
         StackPane root = new StackPane(board);
         root.setStyle("-fx-background-color: black;");
         Scene scene = new Scene(root, 1160, 700);
@@ -607,6 +788,45 @@ public class GameFX extends Application {
         node.setPrefSize(pw * imgW, ph * imgH);
         node.setMaxSize(pw * imgW, ph * imgH);
         node.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+    }
+
+    private Node buildCampaignPhaseCard() {
+        if (campaignManager == null)
+            return null;
+        var nextPhase = campaignManager.getCurrentPhase();
+        if (nextPhase == null)
+            return null;
+
+        var stats = nextPhase.cpuRobot().stats();
+        Label title = new Label(
+                String.format("Próxima fase %d/%d", campaignManager.getCurrentPhaseNumber(),
+                        campaignManager.getTotalPhases()));
+        title.setTextFill(Color.web("#BB86FC"));
+        title.setStyle("-fx-font-weight: bold; -fx-font-size: 14px;");
+
+        Label enemy = new Label("Inimigo: " + nextPhase.cpuCharacter().name());
+        enemy.setTextFill(Color.web("#EDE9FE"));
+        enemy.setStyle("-fx-font-size: 13px;");
+
+        Label statsLbl = new Label(
+                String.format("HP %d | ATK %d | DEF %d", stats.maxHp, stats.atk, stats.def));
+        statsLbl.setTextFill(Color.web("#EDE9FE"));
+        statsLbl.setStyle("-fx-font-size: 12px;");
+
+        Label reward = new Label("Recompensa: +" + nextPhase.cpuCharacter().rewardCredits() + " cr");
+        reward.setTextFill(Color.web("#A7F3D0"));
+        reward.setStyle("-fx-font-size: 12px;");
+
+        VBox box = new VBox(4, title, enemy, statsLbl, reward);
+        box.setPadding(new Insets(8));
+        box.setStyle("""
+                    -fx-background-color: rgba(12,10,20,0.65);
+                    -fx-background-radius: 12;
+                    -fx-border-color: rgba(187,134,252,0.45);
+                    -fx-border-width: 1.5;
+                    -fx-border-radius: 12;
+                """);
+        return box;
     }
 
     // =========================================================
@@ -658,6 +878,172 @@ public class GameFX extends Application {
         // Reutiliza a tela de loja, mas com título diferente e sem permitir trocar
         // personagem
         showShopScreen(p1, false, true);
+    }
+
+    /**
+     * Tela de upgrade de poções entre fases.
+     */
+    private void showUpgradePotionScreen() {
+        // Mostra loja de poções para o jogador com flag especial para PvC upgrade
+        showPotionShopScreenForCampaign(p1);
+    }
+
+    /**
+     * Mostra loja de poções específica para campanha (entre fases).
+     */
+    private void showPotionShopScreenForCampaign(Player player) {
+        final int credits = player.credits();
+
+        // Fundo
+        Image bgImg = load(SHOP_BG);
+        final double IMG_W = bgImg.getWidth();
+        final double IMG_H = bgImg.getHeight();
+
+        Pane board = new Pane();
+        board.setPrefSize(IMG_W, IMG_H);
+        board.setMinSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setMaxSize(Region.USE_PREF_SIZE, Region.USE_PREF_SIZE);
+        board.setBackground(new Background(new BackgroundImage(
+                bgImg, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,
+                BackgroundPosition.CENTER, new BackgroundSize(IMG_W, IMG_H, false, false, false, false))));
+
+        // Título
+        Label title = new Label("LOJA DE POÇÕES - " + player.name().toUpperCase());
+        title.setTextFill(Color.web("#BB86FC"));
+        title.setStyle("-fx-font-size: 28px; -fx-font-weight: bold;");
+        DropShadow titleGlow = new DropShadow(30, Color.web("#BB86FC"));
+        titleGlow.setSpread(0.3);
+        title.setEffect(titleGlow);
+        placePct(title, 0.5, 0.05, 0.4, 0.08, IMG_W, IMG_H);
+        title.setAlignment(Pos.CENTER);
+
+        // Grid de poções (4 tipos x 5 níveis)
+        VBox potionGrid = new VBox(15);
+        potionGrid.setAlignment(Pos.CENTER);
+
+        for (Potion.Type type : Potion.Type.values()) {
+            HBox typeRow = new HBox(10);
+            typeRow.setAlignment(Pos.CENTER);
+
+            // Label do tipo
+            Label typeLabel = new Label(type.displayName() + ":");
+            typeLabel.setTextFill(Color.web("#EDE9FE"));
+            typeLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
+            typeLabel.setPrefWidth(120);
+            typeRow.getChildren().add(typeLabel);
+
+            // Botões para cada nível (1-5)
+            for (int level = 1; level <= 5; level++) {
+                Potion potion = new Potion(type, level);
+                int cost = potion.getCost();
+                int count = player.getPotionCount(potion);
+
+                Button btn = new Button();
+                btn.setPrefSize(80, 100);
+                btn.setStyle("-fx-background-color: rgba(30,30,30,0.9); -fx-background-radius: 8;");
+
+                VBox btnContent = new VBox(5);
+                btnContent.setAlignment(Pos.CENTER);
+
+                // Ícone da poção
+                ImageView icon = new ImageView();
+                try {
+                    Image potionImg = load(potion.getSpritePath());
+                    if (potionImg != null) {
+                        icon.setImage(potionImg);
+                        icon.setFitWidth(50);
+                        icon.setFitHeight(50);
+                        icon.setPreserveRatio(true);
+                    }
+                } catch (Exception e) {
+                    // Fallback se não carregar
+                }
+
+                Label levelLabel = new Label("Nv." + level);
+                levelLabel.setTextFill(Color.web("#EDE9FE"));
+                levelLabel.setStyle("-fx-font-size: 12px;");
+
+                Label costLabel = new Label(cost + "c");
+                costLabel.setTextFill(Color.web("#FFD700"));
+                costLabel.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
+
+                Label countLabel = new Label("x" + count);
+                countLabel.setTextFill(Color.web("#60A5FA"));
+                countLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
+
+                btnContent.getChildren().addAll(icon, levelLabel, costLabel, countLabel);
+                btn.setGraphic(btnContent);
+
+                // Desabilita se não tiver créditos
+                boolean canAfford = credits >= cost;
+                btn.setDisable(!canAfford);
+                if (!canAfford) {
+                    btn.setOpacity(0.5);
+                }
+
+                // Tooltip com descrição
+                String tooltipText = switch (type) {
+                    case VIDA -> String.format("Recupera %d HP", potion.getHealAmount());
+                    case BARRERA -> String.format("Adiciona %d de escudo", potion.getShieldAmount());
+                    case ENERGIA -> String.format("Adiciona %d de carga especial", potion.getEnergyAmount());
+                    case FURIA -> String.format("Aumenta ataque em %.0f%% por %d turnos",
+                            (potion.getFuryMultiplier() - 1.0) * 100, potion.getFuryDuration());
+                };
+                Tooltip tooltip = new Tooltip(tooltipText + "\nCusto: " + cost + " créditos");
+                Tooltip.install(btn, tooltip);
+
+                btn.setOnAction(e -> {
+                    if (player.buyPotion(potion)) {
+                        // Atualiza a tela
+                        showPotionShopScreenForCampaign(player);
+                    } else {
+                        alert("Créditos insuficientes!");
+                    }
+                });
+
+                typeRow.getChildren().add(btn);
+            }
+
+            potionGrid.getChildren().add(typeRow);
+        }
+
+        // Barra inferior
+        Label lblCred = bold("Créditos: " + player.credits());
+        lblCred.setTextFill(Color.web("#EDE9FE"));
+
+        Button btnContinue = primaryButton("Continuar para Próxima Fase");
+        btnContinue.setOnAction(e -> {
+            // Após comprar poções, inicia a próxima fase da campanha
+            startCampaignPhase();
+        });
+
+        HBox bottom = new HBox(16, new Region(), lblCred, btnContinue);
+        HBox.setHgrow(bottom.getChildren().get(0), Priority.ALWAYS);
+        bottom.setAlignment(Pos.CENTER_LEFT);
+        bottom.setPadding(new Insets(10));
+        bottom.setStyle("-fx-background-color: rgba(0,0,0,0.38); -fx-background-radius: 14;");
+
+        VBox centerBox = new VBox(20, potionGrid, bottom);
+        centerBox.setAlignment(Pos.CENTER);
+
+        board.getChildren().addAll(title, centerBox);
+        placePct(centerBox, 0.1, 0.15, 0.8, 0.75, IMG_W, IMG_H);
+
+        // Cena
+        StackPane root = new StackPane(board);
+        root.setStyle("-fx-background-color: black;");
+        Scene scene = new Scene(root, 1160, 700);
+
+        Runnable rescale = () -> {
+            double s = Math.min(scene.getWidth() / IMG_W, scene.getHeight() / IMG_H);
+            board.setScaleX(s);
+            board.setScaleY(s);
+        };
+        scene.widthProperty().addListener((o, a, b) -> rescale.run());
+        scene.heightProperty().addListener((o, a, b) -> rescale.run());
+        rescale.run();
+
+        stage.setScene(scene);
     }
 
     /**
@@ -1102,8 +1488,15 @@ public class GameFX extends Application {
             tiles.forEach(tl -> tl.updateAffordability(available));
         };
 
-        tiles.get(0).btn.setSelected(true);
-        bindTo.set(0);
+        int initial = Math.max(0, Math.min(5, bindTo.get()));
+        final int chosen = initial;
+        tiles.stream()
+                .filter(tl -> tl.level == chosen)
+                .findFirst()
+                .ifPresentOrElse(
+                        tl -> tl.btn.setSelected(true),
+                        () -> tiles.get(0).btn.setSelected(true));
+        bindTo.set(initial);
         refreshAfford.run();
 
         VBox node = new VBox(8, titleBox, row);
@@ -1145,14 +1538,27 @@ public class GameFX extends Application {
     }
 
     private Purchase buildPurchase(int credits, CharacterClass character, int wLvl, int aLvl,
-            IntUnaryOperator weaponCost, IntUnaryOperator armorCost) {
+            IntUnaryOperator weaponCost, IntUnaryOperator armorCost, Robot currentRobot) {
         int total = weaponCost.applyAsInt(wLvl) + armorCost.applyAsInt(aLvl);
-        if (total > credits)
+        int existing = equipmentCost(currentRobot);
+        int delta = Math.max(0, total - existing);
+        if (delta > credits)
             return null;
         Weapon w = (wLvl <= 0) ? null : new Weapon("Arma N" + wLvl, wLvl);
         Armor a = (aLvl <= 0) ? null : new Armor("Armadura N" + aLvl, aLvl);
         Robot preview = new Robot(character, w, a, null); // sem módulo
-        return new Purchase(character, preview, total);
+        return new Purchase(character, preview, total, delta);
+    }
+
+    private int equipmentCost(Robot robot) {
+        if (robot == null)
+            return 0;
+        int cost = 0;
+        if (robot.weapon() != null)
+            cost += robot.weapon().getCost();
+        if (robot.armor() != null)
+            cost += robot.armor().getCost();
+        return cost;
     }
 
     private void alert(String msg) {

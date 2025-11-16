@@ -21,6 +21,12 @@ public class DamageCalculator {
 
         double raw = rolledAttack - rolledDefense;
 
+        // Fúria (multiplicador de ataque)
+        double furyMultiplier = attacker.getFuryMultiplier();
+        if (furyMultiplier > 1.0) {
+            raw *= furyMultiplier;
+        }
+
         // Crit
         boolean critical = rng.nextDouble() < a.crit;
         if (critical) raw *= 1.5;

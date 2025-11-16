@@ -11,14 +11,17 @@ import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
+import javafx.scene.control.Alert;
+import javafx.scene.control.Alert.AlertType;
+import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
+import javafx.scene.control.ScrollPane;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.Glow;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
-import javafx.scene.paint.*; // LinearGradient, RadialGradient, CycleMethod, Stop, Color
 import javafx.scene.text.Font;
 import javafx.scene.text.Text;
 
@@ -128,8 +131,11 @@ public class PixelBattleView {
     // ====== HUD / Botões (overlay) ======
     private Label lblTurn;
     private Button btnAtk, btnDef, btnSpc;
+    private Button btnInventory;
     private HBox buttons;
     private String lastAccent = "";
+    private VBox inventoryPanel; // Painel lateral de inventário
+    private boolean inventoryVisible = false;
 
     private final Random rng = new Random();
 
@@ -257,7 +263,7 @@ public class PixelBattleView {
         }
 
         // ===== Overlay =====
-        StackPane root = new StackPane(canvas);
+        Pane root = new Pane(canvas);
 
         // Banner central superior
         lblTurn = new Label();
@@ -283,7 +289,7 @@ public class PixelBattleView {
         bannerBox.setPadding(new Insets(14, 0, 0, 0));
         bannerBox.setMouseTransparent(true);
 
-        // Botões
+        // Botões principais
         btnAtk = makeStoneButton("⚔ ATTACK");
         btnDef = makeStoneButton("🛡 DEFEND");
         btnSpc = makeStoneButton("⚡ SPECIAL");
@@ -302,12 +308,60 @@ public class PixelBattleView {
         bottomBox.setAlignment(Pos.BOTTOM_CENTER);
         bottomBox.setPadding(new Insets(0, 0, 20, 0));
 
+        // Botão Inventário (lado esquerdo, canto superior)
+        btnInventory = new Button("📦 INVENTÁRIO");
+        btnInventory.setStyle("""
+                -fx-background-color: rgba(30, 30, 30, 0.9);
+                -fx-text-fill: #EDE9FE;
+                -fx-font-size: 14px;
+                -fx-font-weight: bold;
+                -fx-padding: 8 15;
+                -fx-background-radius: 6;
+                -fx-border-color: #BB86FC;
+                -fx-border-width: 2;
+                -fx-border-radius: 6;
+                """);
+        btnInventory.setOnMouseEntered(e -> btnInventory.setStyle("""
+                -fx-background-color: rgba(50, 50, 50, 0.95);
+                -fx-text-fill: #BB86FC;
+                -fx-font-size: 14px;
+                -fx-font-weight: bold;
+                -fx-padding: 8 15;
+                -fx-background-radius: 6;
+                -fx-border-color: #BB86FC;
+                -fx-border-width: 2;
+                -fx-border-radius: 6;
+                """));
+        btnInventory.setOnMouseExited(e -> btnInventory.setStyle("""
+                -fx-background-color: rgba(30, 30, 30, 0.9);
+                -fx-text-fill: #EDE9FE;
+                -fx-font-size: 14px;
+                -fx-font-weight: bold;
+                -fx-padding: 8 15;
+                -fx-background-radius: 6;
+                -fx-border-color: #BB86FC;
+                -fx-border-width: 2;
+                -fx-border-radius: 6;
+                """));
+        btnInventory.setOnAction(e -> toggleInventory());
+        // Posiciona no canto superior esquerdo, abaixo do banner
+        btnInventory.setLayoutX(15);
+        btnInventory.setLayoutY(60);
+
+        // Painel de inventário (lateral esquerda, abaixo do botão)
+        inventoryPanel = createInventoryPanel();
+        inventoryPanel.setVisible(false);
+        inventoryPanel.setLayoutX(15);
+        inventoryPanel.setLayoutY(110);
+
         BorderPane overlay = new BorderPane();
         overlay.setPickOnBounds(false);
+        overlay.setPrefSize(BASE_W, BASE_H);
+        overlay.setMaxSize(BASE_W, BASE_H);
         overlay.setTop(bannerBox);
         overlay.setBottom(bottomBox);
 
-        root.getChildren().add(overlay);
+        root.getChildren().addAll(overlay, btnInventory, inventoryPanel);
 
         Scene scene = new Scene(root, BASE_W, BASE_H, Color.BLACK);
 
@@ -355,6 +409,16 @@ public class PixelBattleView {
                 btnAtk.setDisable(finished || inputLocked || isCPUTurn);
                 btnDef.setDisable(finished || inputLocked || isCPUTurn);
                 btnSpc.setDisable(finished || inputLocked || isCPUTurn || !s.currentSpecial);
+
+                // Atualiza disponibilidade de inventário
+                var currentPlayer = engine.getCurrentPlayer();
+                boolean hasPotions = currentPlayer != null && !currentPlayer.getAvailablePotions().isEmpty();
+                btnInventory.setDisable(finished || inputLocked || isCPUTurn || !hasPotions);
+
+                // Atualiza o painel de inventário se estiver visível
+                if (inventoryVisible) {
+                    updateInventoryPanel();
+                }
 
                 // Se for vez da CPU e não estiver bloqueado, executa ação da IA
                 if (isCPUTurn && !inputLocked && !finished && phase == Phase.NONE) {
@@ -758,6 +822,7 @@ public class PixelBattleView {
         drawSprite(img2, x2, r2y, drawW2, drawH2, true);
 
         drawHpBarsHD();
+        drawSpecialChargeBars();
 
         // Desenha efeitos visuais (textos flutuantes)
         drawFloatingTexts();
@@ -826,6 +891,80 @@ public class PixelBattleView {
         gc.fillRect(BASE_W - barW - 26, 26, (int) (barW * r2), barH);
     }
 
+    private void drawSpecialChargeBars() {
+        var s = engine.snapshot();
+
+        int barW = 20; // largura da barra (vertical)
+        int barH = 200; // altura da barra
+        int yStart = 100; // posição Y inicial
+
+        // ESQUERDA (Jogador 1)
+        int leftCharge, leftMaxCharge = 100;
+        if (s.currentName.equals(leftName)) {
+            leftCharge = s.currentSpecialCharge;
+        } else {
+            leftCharge = s.enemySpecialCharge;
+        }
+
+        // DIREITA (Jogador 2 ou CPU)
+        int rightCharge, rightMaxCharge = 100;
+        if (s.currentName.equals(rightName)) {
+            rightCharge = s.currentSpecialCharge;
+        } else {
+            rightCharge = s.enemySpecialCharge;
+        }
+
+        double leftRatio = Math.max(0, Math.min(1, (double) leftCharge / leftMaxCharge));
+        double rightRatio = Math.max(0, Math.min(1, (double) rightCharge / rightMaxCharge));
+
+        // Desenha barra ESQUERDA (vertical, canto esquerdo)
+        int leftX = 24;
+        int leftY = yStart;
+
+        // Borda preta
+        gc.setFill(Color.color(0, 0, 0, 0.6));
+        gc.fillRect(leftX, leftY, barW + 4, barH + 4);
+
+        // Fundo cinza escuro
+        gc.setFill(Color.color(0.2, 0.2, 0.2, 0.8));
+        gc.fillRect(leftX + 2, leftY + 2, barW, barH);
+
+        // Barra amarela preenchida de baixo para cima
+        int fillHeight = (int) (barH * leftRatio);
+        gc.setFill(Color.web("#FFD700")); // dourado/amarelo
+        gc.fillRect(leftX + 2, leftY + 2 + (barH - fillHeight), barW, fillHeight);
+
+        // Desenha barra DIREITA (vertical, canto direito)
+        int rightX = BASE_W - barW - 28;
+        int rightY = yStart;
+
+        // Borda preta
+        gc.setFill(Color.color(0, 0, 0, 0.6));
+        gc.fillRect(rightX, rightY, barW + 4, barH + 4);
+
+        // Fundo cinza escuro
+        gc.setFill(Color.color(0.2, 0.2, 0.2, 0.8));
+        gc.fillRect(rightX + 2, rightY + 2, barW, barH);
+
+        // Barra amarela preenchida de baixo para cima
+        fillHeight = (int) (barH * rightRatio);
+        gc.setFill(Color.web("#FFD700")); // dourado/amarelo
+        gc.fillRect(rightX + 2, rightY + 2 + (barH - fillHeight), barW, fillHeight);
+
+        // Adiciona brilho quando está cheio
+        if (leftRatio >= 1.0) {
+            gc.setStroke(Color.web("#FFFF00", 0.8));
+            gc.setLineWidth(2);
+            gc.strokeRect(leftX + 1, leftY + 1, barW + 2, barH + 2);
+        }
+
+        if (rightRatio >= 1.0) {
+            gc.setStroke(Color.web("#FFFF00", 0.8));
+            gc.setLineWidth(2);
+            gc.strokeRect(rightX + 1, rightY + 1, barW + 2, barH + 2);
+        }
+    }
+
     private void perform(Action a) {
         var before = engine.snapshot();
 
@@ -836,6 +975,18 @@ public class PixelBattleView {
                 createVisualEffects(result.event);
             }
             // Desbloqueia input após animação de defesa (tanto CPU quanto jogador)
+            inputLocked = false;
+            return;
+        }
+
+        // USE_POTION: executa imediatamente sem animação
+        if (a == Action.USE_POTION) {
+            var result = engine.perform(a);
+            // Cria efeito visual da poção
+            if (result.event != null) {
+                createVisualEffects(result.event);
+            }
+            // Desbloqueia input após usar poção
             inputLocked = false;
             return;
         }
@@ -1167,9 +1318,41 @@ public class PixelBattleView {
      * Cria efeitos visuais baseados no evento de batalha.
      */
     private void createVisualEffects(UiBattleEngine.BattleEvent event) {
-        // Determina a posição do defensor (onde mostrar os efeitos)
-        boolean defenderIsP1 = event.defenderName.equals(leftName);
+        // Determina a posição do jogador (onde mostrar os efeitos)
+        boolean playerIsP1 = event.attackerName.equals(leftName);
         double centerX = BASE_W / 2;
+        double playerX = playerIsP1 ? (centerX - GAP - 100) : (centerX + GAP + 100);
+        double playerY = R_Y - 150; // Acima do sprite
+
+        // Efeitos de poções (dano negativo indica efeitos especiais)
+        if (event.damage < 0) {
+            if (event.damage > -1000) {
+                // Poção de vida (cura)
+                int healAmount = -event.damage;
+                floatingTexts.add(new FloatingText("+" + healAmount, playerX, playerY,
+                        Color.web("#00FF00"), false));
+                floatingTexts.add(new FloatingText("CURADO", playerX, playerY - 30,
+                        Color.web("#00FF88"), false));
+            } else if (event.damage > -2000) {
+                // Poção de barreira (escudo)
+                int shieldAmount = -(event.damage + 1000);
+                floatingTexts.add(new FloatingText("ESCUDO +" + shieldAmount, playerX, playerY,
+                        Color.web("#4488FF"), false));
+            } else if (event.damage > -3000) {
+                // Poção de energia
+                int energyAmount = -(event.damage + 2000);
+                floatingTexts.add(new FloatingText("ENERGIA +" + energyAmount, playerX, playerY,
+                        Color.web("#FFD700"), false));
+            } else {
+                // Poção de fúria
+                floatingTexts.add(new FloatingText("FÚRIA!", playerX, playerY,
+                        Color.web("#FF6600"), true));
+            }
+            return;
+        }
+
+        // Determina a posição do defensor (onde mostrar os efeitos de dano)
+        boolean defenderIsP1 = event.defenderName.equals(leftName);
         double defenderX = defenderIsP1 ? (centerX - GAP - 100) : (centerX + GAP + 100);
         double defenderY = R_Y - 150; // Acima do sprite
 
@@ -1291,5 +1474,257 @@ public class PixelBattleView {
             }
         }
         gc.setGlobalAlpha(1.0);
+    }
+
+    /**
+     * Cria o painel de inventário lateral.
+     */
+    private VBox createInventoryPanel() {
+        VBox panel = new VBox(10);
+        panel.setStyle("""
+                -fx-background-color: rgba(20, 20, 30, 0.95);
+                -fx-background-radius: 10;
+                -fx-border-color: #BB86FC;
+                -fx-border-width: 2;
+                -fx-border-radius: 10;
+                -fx-padding: 15;
+                """);
+        panel.setPrefWidth(280);
+        panel.setMaxHeight(500);
+
+        // Cabeçalho com título e botão fechar
+        HBox header = new HBox(10);
+        header.setAlignment(Pos.CENTER_LEFT);
+        Label title = new Label("INVENTÁRIO");
+        title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #BB86FC;");
+
+        Region spacer = new Region();
+        HBox.setHgrow(spacer, Priority.ALWAYS);
+
+        Button btnClose = new Button("✕");
+        btnClose.setStyle("""
+                -fx-background-color: rgba(200, 50, 50, 0.8);
+                -fx-text-fill: white;
+                -fx-font-size: 14px;
+                -fx-font-weight: bold;
+                -fx-padding: 4 8;
+                -fx-background-radius: 4;
+                -fx-min-width: 30;
+                -fx-min-height: 30;
+                """);
+        btnClose.setOnMouseEntered(e -> btnClose.setStyle("""
+                -fx-background-color: rgba(255, 70, 70, 0.9);
+                -fx-text-fill: white;
+                -fx-font-size: 14px;
+                -fx-font-weight: bold;
+                -fx-padding: 4 8;
+                -fx-background-radius: 4;
+                -fx-min-width: 30;
+                -fx-min-height: 30;
+                """));
+        btnClose.setOnMouseExited(e -> btnClose.setStyle("""
+                -fx-background-color: rgba(200, 50, 50, 0.8);
+                -fx-text-fill: white;
+                -fx-font-size: 14px;
+                -fx-font-weight: bold;
+                -fx-padding: 4 8;
+                -fx-background-radius: 4;
+                -fx-min-width: 30;
+                -fx-min-height: 30;
+                """));
+        btnClose.setOnAction(e -> {
+            inventoryVisible = false;
+            inventoryPanel.setVisible(false);
+        });
+
+        header.getChildren().addAll(title, spacer, btnClose);
+        panel.getChildren().add(header);
+
+        ScrollPane scrollPane = new ScrollPane();
+        scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
+        scrollPane.setFitToWidth(true);
+        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
+        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
+
+        VBox potionContainer = new VBox(8);
+        potionContainer.setStyle("-fx-padding: 5;");
+        scrollPane.setContent(potionContainer);
+
+        panel.getChildren().add(scrollPane);
+        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+
+        // Armazena referência ao container para atualização
+        panel.setUserData(potionContainer);
+
+        return panel;
+    }
+
+    /**
+     * Alterna a visibilidade do painel de inventário.
+     */
+    private void toggleInventory() {
+        if (inputLocked || engine.snapshot().finished)
+            return;
+
+        inventoryVisible = !inventoryVisible;
+        inventoryPanel.setVisible(inventoryVisible);
+
+        if (inventoryVisible) {
+            updateInventoryPanel();
+        }
+    }
+
+    /**
+     * Atualiza o conteúdo do painel de inventário.
+     */
+    private void updateInventoryPanel() {
+        var currentPlayer = engine.getCurrentPlayer();
+        if (currentPlayer == null)
+            return;
+
+        VBox potionContainer = (VBox) inventoryPanel.getUserData();
+        potionContainer.getChildren().clear();
+
+        var availablePotions = currentPlayer.getAvailablePotions();
+        if (availablePotions.isEmpty()) {
+            Label empty = new Label("Nenhuma poção disponível");
+            empty.setStyle("-fx-text-fill: #888; -fx-font-size: 14px;");
+            potionContainer.getChildren().add(empty);
+            return;
+        }
+
+        // Agrupa por tipo
+        for (br.puc.battledolls.items.Potion.Type type : br.puc.battledolls.items.Potion.Type.values()) {
+            boolean hasType = false;
+            for (br.puc.battledolls.items.Potion potion : availablePotions) {
+                if (potion.type() == type) {
+                    if (!hasType) {
+                        // Label do tipo
+                        Label typeLabel = new Label(type.displayName() + ":");
+                        typeLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #EDE9FE;");
+                        potionContainer.getChildren().add(typeLabel);
+                        hasType = true;
+                    }
+
+                    // Botão da poção
+                    Button potionBtn = createPotionButton(potion, currentPlayer);
+                    potionContainer.getChildren().add(potionBtn);
+                }
+            }
+        }
+    }
+
+    /**
+     * Cria um botão para uma poção específica.
+     */
+    private Button createPotionButton(br.puc.battledolls.items.Potion potion, br.puc.battledolls.model.Player player) {
+        int count = player.getPotionCount(potion);
+
+        HBox btnContent = new HBox(10);
+        btnContent.setAlignment(Pos.CENTER_LEFT);
+
+        // Ícone da poção
+        javafx.scene.image.ImageView icon = new javafx.scene.image.ImageView();
+        try {
+            javafx.scene.image.Image potionImg = new javafx.scene.image.Image(
+                    getClass().getResourceAsStream(potion.getSpritePath()));
+            if (potionImg != null) {
+                icon.setImage(potionImg);
+                icon.setFitWidth(40);
+                icon.setFitHeight(40);
+                icon.setPreserveRatio(true);
+            }
+        } catch (Exception e) {
+            // Fallback se não carregar
+        }
+
+        VBox textContent = new VBox(2);
+        Label nameLabel = new Label(potion.getDisplayName());
+        nameLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #EDE9FE;");
+
+        String description = switch (potion.type()) {
+            case VIDA -> String.format("Recupera %d HP", potion.getHealAmount());
+            case BARRERA -> String.format("+%d Escudo", potion.getShieldAmount());
+            case ENERGIA -> String.format("+%d Energia", potion.getEnergyAmount());
+            case FURIA -> String.format("+%.0f%% Ataque (%d turnos)",
+                    (potion.getFuryMultiplier() - 1.0) * 100, potion.getFuryDuration());
+        };
+        Label descLabel = new Label(description);
+        descLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #AAA;");
+
+        Label countLabel = new Label("x" + count);
+        countLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #60A5FA;");
+
+        textContent.getChildren().addAll(nameLabel, descLabel, countLabel);
+        btnContent.getChildren().addAll(icon, textContent);
+
+        Button btn = new Button();
+        btn.setGraphic(btnContent);
+        btn.setPrefWidth(250);
+        btn.setPrefHeight(60);
+        btn.setStyle("""
+                -fx-background-color: rgba(40, 40, 50, 0.9);
+                -fx-background-radius: 6;
+                -fx-border-color: #60A5FA;
+                -fx-border-width: 1;
+                -fx-border-radius: 6;
+                """);
+        btn.setOnMouseEntered(e -> btn.setStyle("""
+                -fx-background-color: rgba(60, 60, 70, 0.95);
+                -fx-background-radius: 6;
+                -fx-border-color: #BB86FC;
+                -fx-border-width: 2;
+                -fx-border-radius: 6;
+                """));
+        btn.setOnMouseExited(e -> btn.setStyle("""
+                -fx-background-color: rgba(40, 40, 50, 0.9);
+                -fx-background-radius: 6;
+                -fx-border-color: #60A5FA;
+                -fx-border-width: 1;
+                -fx-border-radius: 6;
+                """));
+
+        btn.setOnAction(e -> {
+            if (inputLocked || engine.snapshot().finished)
+                return;
+            confirmAndUsePotion(potion);
+        });
+
+        return btn;
+    }
+
+    /**
+     * Mostra diálogo de confirmação e usa a poção se confirmado.
+     */
+    private void confirmAndUsePotion(br.puc.battledolls.items.Potion potion) {
+        String description = switch (potion.type()) {
+            case VIDA -> String.format("Recuperar %d HP?", potion.getHealAmount());
+            case BARRERA -> String.format("Adicionar %d de escudo?", potion.getShieldAmount());
+            case ENERGIA -> String.format("Adicionar %d de carga especial?", potion.getEnergyAmount());
+            case FURIA -> String.format("Aumentar ataque em %.0f%% por %d turnos?",
+                    (potion.getFuryMultiplier() - 1.0) * 100, potion.getFuryDuration());
+        };
+
+        Alert confirmDialog = new Alert(AlertType.CONFIRMATION);
+        confirmDialog.setTitle("Usar Poção");
+        confirmDialog.setHeaderText("Usar " + potion.getDisplayName() + "?");
+        confirmDialog.setContentText(description);
+        confirmDialog.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
+
+        // Estiliza o diálogo
+        confirmDialog.getDialogPane().setStyle("""
+                -fx-background-color: rgba(30, 30, 40, 0.98);
+                -fx-text-fill: #EDE9FE;
+                """);
+
+        confirmDialog.showAndWait().ifPresent(response -> {
+            if (response == ButtonType.YES) {
+                // Fecha o inventário antes de usar a poção
+                inventoryVisible = false;
+                inventoryPanel.setVisible(false);
+                // Usa a poção
+                perform(br.puc.battledolls.combat.Action.usePotion(potion));
+            }
+        });
     }
 }
