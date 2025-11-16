@@ -13,11 +13,11 @@ import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
 import javafx.scene.control.Label;
-import javafx.scene.control.ScrollPane;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.Glow;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -359,7 +359,18 @@ public class PixelBattleView {
         overlay.setTop(bannerBox);
         overlay.setBottom(bottomBox);
 
+        // Adiciona elementos na ordem correta: overlay primeiro, depois botão e painel (que ficam acima)
         root.getChildren().addAll(overlay, btnInventory, inventoryPanel);
+        
+        // GARANTE ABSOLUTAMENTE que o painel de inventário e botão recebem eventos de mouse
+        btnInventory.setMouseTransparent(false);
+        btnInventory.setPickOnBounds(true);
+        inventoryPanel.setMouseTransparent(false);
+        inventoryPanel.setPickOnBounds(true);
+        
+        // Garante que o root também não bloqueia
+        root.setMouseTransparent(false);
+        root.setPickOnBounds(true);
 
         Scene scene = new Scene(root, BASE_W, BASE_H, Color.BLACK);
 
@@ -968,10 +979,14 @@ public class PixelBattleView {
     }
 
     private void perform(BattleCommand command) {
+        System.out.println("[DEBUG] perform(BattleCommand) chamado");
+        System.out.println("[DEBUG] Action: " + command.action());
+
         var before = engine.snapshot();
         Action a = command.action();
 
         if (a == Action.DEFEND) {
+            System.out.println("[DEBUG] Executando DEFEND");
             var result = engine.perform(command);
             // Cria efeito visual para defesa se necessário
             if (result.event != null && result.event.isDefended) {
@@ -984,13 +999,23 @@ public class PixelBattleView {
 
         // USE_POTION: executa imediatamente sem animação
         if (a == Action.USE_POTION) {
+            System.out.println("[DEBUG] ✅ Executando USE_POTION");
+            System.out.println("[DEBUG] Poção: " + command.potion().getDisplayName());
+
             var result = engine.perform(command);
+            System.out.println("[DEBUG] engine.perform() retornou");
+            System.out.println("[DEBUG] Logs: " + result.logs);
+
             // Cria efeito visual da poção
             if (result.event != null) {
+                System.out.println("[DEBUG] Criando efeitos visuais");
                 createVisualEffects(result.event);
             }
+
             // Desbloqueia input após usar poção
             inputLocked = false;
+            System.out.println("[DEBUG] inputLocked = false");
+            System.out.println("[DEBUG] USE_POTION concluído!");
             return;
         }
 
@@ -1480,7 +1505,7 @@ public class PixelBattleView {
     }
 
     /**
-     * Cria o painel de inventário lateral.
+     * Cria o painel de inventário lateral - VERSÃO SIMPLIFICADA SEM SCROLLPANE.
      */
     private VBox createInventoryPanel() {
         VBox panel = new VBox(10);
@@ -1494,15 +1519,22 @@ public class PixelBattleView {
                 """);
         panel.setPrefWidth(280);
         panel.setMaxHeight(500);
+        panel.setMouseTransparent(false);
+        panel.setPickOnBounds(true);
 
         // Cabeçalho com título e botão fechar
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
+        header.setMouseTransparent(false);
+        header.setPickOnBounds(true);
+        
         Label title = new Label("INVENTÁRIO");
         title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #BB86FC;");
+        title.setMouseTransparent(true);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
+        spacer.setMouseTransparent(true);
 
         Button btnClose = new Button("✕");
         btnClose.setStyle("""
@@ -1515,6 +1547,8 @@ public class PixelBattleView {
                 -fx-min-width: 30;
                 -fx-min-height: 30;
                 """);
+        btnClose.setMouseTransparent(false);
+        btnClose.setPickOnBounds(true);
         btnClose.setOnMouseEntered(e -> btnClose.setStyle("""
                 -fx-background-color: rgba(255, 70, 70, 0.9);
                 -fx-text-fill: white;
@@ -1536,6 +1570,7 @@ public class PixelBattleView {
                 -fx-min-height: 30;
                 """));
         btnClose.setOnAction(e -> {
+            System.out.println("[INVENTORY] Botão fechar clicado");
             inventoryVisible = false;
             inventoryPanel.setVisible(false);
         });
@@ -1543,18 +1578,14 @@ public class PixelBattleView {
         header.getChildren().addAll(title, spacer, btnClose);
         panel.getChildren().add(header);
 
-        ScrollPane scrollPane = new ScrollPane();
-        scrollPane.setStyle("-fx-background: transparent; -fx-background-color: transparent;");
-        scrollPane.setFitToWidth(true);
-        scrollPane.setHbarPolicy(ScrollPane.ScrollBarPolicy.NEVER);
-        scrollPane.setVbarPolicy(ScrollPane.ScrollBarPolicy.AS_NEEDED);
-
+        // Container de poções - SEM SCROLLPANE, apenas VBox simples
         VBox potionContainer = new VBox(8);
         potionContainer.setStyle("-fx-padding: 5;");
-        scrollPane.setContent(potionContainer);
+        potionContainer.setMouseTransparent(false);
+        potionContainer.setPickOnBounds(true);
+        VBox.setVgrow(potionContainer, Priority.ALWAYS);
 
-        panel.getChildren().add(scrollPane);
-        VBox.setVgrow(scrollPane, Priority.ALWAYS);
+        panel.getChildren().add(potionContainer);
 
         // Armazena referência ao container para atualização
         panel.setUserData(potionContainer);
@@ -1578,132 +1609,178 @@ public class PixelBattleView {
     }
 
     /**
-     * Atualiza o conteúdo do painel de inventário.
+     * Atualiza o conteúdo do painel de inventário - VERSÃO COMPLETAMENTE REWRITTEN.
      */
     private void updateInventoryPanel() {
+        System.out.println("[INVENTORY] updateInventoryPanel() chamado");
+        
         var currentPlayer = engine.getCurrentPlayer();
-        if (currentPlayer == null)
+        if (currentPlayer == null) {
+            System.out.println("[INVENTORY] ❌ currentPlayer é null");
             return;
+        }
 
         VBox potionContainer = (VBox) inventoryPanel.getUserData();
+        if (potionContainer == null) {
+            System.out.println("[INVENTORY] ❌ potionContainer é null");
+            return;
+        }
+        
         potionContainer.getChildren().clear();
+        System.out.println("[INVENTORY] Container limpo");
 
         var availablePotions = currentPlayer.getAvailablePotions();
+        System.out.println("[INVENTORY] Poções disponíveis: " + availablePotions.size());
+        
         if (availablePotions.isEmpty()) {
             Label empty = new Label("Nenhuma poção disponível");
             empty.setStyle("-fx-text-fill: #888; -fx-font-size: 14px;");
+            empty.setMouseTransparent(true);
             potionContainer.getChildren().add(empty);
             return;
         }
 
-        // Agrupa por tipo
-        for (br.puc.battledolls.items.Potion.Type type : br.puc.battledolls.items.Potion.Type.values()) {
-            boolean hasType = false;
-            for (br.puc.battledolls.items.Potion potion : availablePotions) {
-                if (potion.type() == type) {
-                    if (!hasType) {
-                        // Label do tipo
-                        Label typeLabel = new Label(type.displayName() + ":");
-                        typeLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #EDE9FE;");
-                        potionContainer.getChildren().add(typeLabel);
-                        hasType = true;
-                    }
+        // Cria botões para cada poção - VERSÃO ULTRA SIMPLIFICADA
+        for (br.puc.battledolls.items.Potion potion : availablePotions) {
+            int count = currentPlayer.getPotionCount(potion);
+            System.out.println("[INVENTORY] Criando botão para: " + potion.getDisplayName() + " (x" + count + ")");
 
-                    // Botão da poção
-                    Button potionBtn = createPotionButton(potion, currentPlayer);
-                    potionContainer.getChildren().add(potionBtn);
+            // Descrição
+            String description = switch (potion.type()) {
+                case VIDA -> String.format("+%d HP", potion.getHealAmount());
+                case BARRERA -> String.format("+%d Escudo", potion.getShieldAmount());
+                case ENERGIA -> String.format("+%d Energia", potion.getEnergyAmount());
+                case FURIA -> String.format("+%.0f%% Atk", (potion.getFuryMultiplier() - 1.0) * 100);
+            };
+
+            // Button - CONFIGURAÇÃO MÁXIMA PARA CLICABILIDADE
+            Button potionButton = new Button();
+            potionButton.setText(String.format("[x%d] %s (%s)", count, potion.getDisplayName(), description));
+            potionButton.setPrefWidth(250);
+            potionButton.setPrefHeight(45);
+            potionButton.setMinWidth(250);
+            potionButton.setMinHeight(45);
+            potionButton.setMaxWidth(250);
+            potionButton.setMaxHeight(45);
+            
+            // CRÍTICO: Garantir que o botão recebe eventos
+            potionButton.setMouseTransparent(false);
+            potionButton.setPickOnBounds(true);
+            potionButton.setDisable(false);
+            potionButton.setFocusTraversable(true);
+            
+            potionButton.setStyle("""
+                    -fx-background-color: rgba(60, 50, 80, 0.9);
+                    -fx-text-fill: #EDE9FE;
+                    -fx-font-size: 13px;
+                    -fx-background-radius: 6;
+                    -fx-border-color: #BB86FC;
+                    -fx-border-width: 2;
+                    -fx-border-radius: 6;
+                    -fx-padding: 10;
+                    -fx-alignment: CENTER_LEFT;
+                    -fx-content-display: LEFT;
+                    """);
+
+            // Armazena a poção como userData
+            potionButton.setUserData(potion);
+
+            // EVENTO DE CLIQUE - MÚLTIPLAS FORMAS PARA GARANTIR
+            final br.puc.battledolls.items.Potion finalPotion = potion; // Final para lambda
+            
+            // onAction (principal)
+            potionButton.setOnAction(e -> {
+                System.out.println("[INVENTORY] ✅ onAction disparado para: " + finalPotion.getDisplayName());
+                handlePotionClick(finalPotion);
+            });
+            
+            // onMouseClicked (backup)
+            potionButton.setOnMouseClicked(e -> {
+                System.out.println("[INVENTORY] ✅ onMouseClicked disparado para: " + finalPotion.getDisplayName());
+                if (e.getButton() == MouseButton.PRIMARY) {
+                    handlePotionClick(finalPotion);
                 }
-            }
+            });
+            
+            // onMousePressed (backup extra)
+            potionButton.setOnMousePressed(e -> {
+                System.out.println("[INVENTORY] ✅ onMousePressed disparado para: " + finalPotion.getDisplayName());
+            });
+
+            // Efeito hover
+            potionButton.setOnMouseEntered(e -> {
+                System.out.println("[INVENTORY] Mouse entrou no botão: " + finalPotion.getDisplayName());
+                potionButton.setStyle("""
+                        -fx-background-color: rgba(100, 80, 130, 0.95);
+                        -fx-text-fill: #FFFFFF;
+                        -fx-font-size: 13px;
+                        -fx-background-radius: 6;
+                        -fx-border-color: #E0C3FC;
+                        -fx-border-width: 3;
+                        -fx-border-radius: 6;
+                        -fx-padding: 10;
+                        -fx-alignment: CENTER_LEFT;
+                        -fx-content-display: LEFT;
+                        -fx-cursor: hand;
+                        """);
+            });
+
+            potionButton.setOnMouseExited(e -> {
+                potionButton.setStyle("""
+                        -fx-background-color: rgba(60, 50, 80, 0.9);
+                        -fx-text-fill: #EDE9FE;
+                        -fx-font-size: 13px;
+                        -fx-background-radius: 6;
+                        -fx-border-color: #BB86FC;
+                        -fx-border-width: 2;
+                        -fx-border-radius: 6;
+                        -fx-padding: 10;
+                        -fx-alignment: CENTER_LEFT;
+                        -fx-content-display: LEFT;
+                        """);
+            });
+
+            potionContainer.getChildren().add(potionButton);
+            System.out.println("[INVENTORY] Botão adicionado ao container");
         }
+        
+        System.out.println("[INVENTORY] Total de botões criados: " + potionContainer.getChildren().size());
     }
-
+    
     /**
-     * Cria um botão para uma poção específica.
+     * Handler centralizado para cliques em poções.
      */
-    private Button createPotionButton(br.puc.battledolls.items.Potion potion, br.puc.battledolls.model.Player player) {
-        int count = player.getPotionCount(potion);
-
-        HBox btnContent = new HBox(10);
-        btnContent.setAlignment(Pos.CENTER_LEFT);
-
-        // Ícone da poção
-        javafx.scene.image.ImageView icon = new javafx.scene.image.ImageView();
-        try {
-            javafx.scene.image.Image potionImg = new javafx.scene.image.Image(
-                    getClass().getResourceAsStream(potion.getSpritePath()));
-            if (potionImg != null) {
-                icon.setImage(potionImg);
-                icon.setFitWidth(40);
-                icon.setFitHeight(40);
-                icon.setPreserveRatio(true);
-            }
-        } catch (Exception e) {
-            // Fallback se não carregar
+    private void handlePotionClick(br.puc.battledolls.items.Potion potion) {
+        System.out.println("[INVENTORY] handlePotionClick() chamado para: " + potion.getDisplayName());
+        
+        if (inputLocked) {
+            System.out.println("[INVENTORY] ❌ inputLocked = true");
+            return;
         }
-
-        VBox textContent = new VBox(2);
-        Label nameLabel = new Label(potion.getDisplayName());
-        nameLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #EDE9FE;");
-
-        String description = switch (potion.type()) {
-            case VIDA -> String.format("Recupera %d HP", potion.getHealAmount());
-            case BARRERA -> String.format("+%d Escudo", potion.getShieldAmount());
-            case ENERGIA -> String.format("+%d Energia", potion.getEnergyAmount());
-            case FURIA -> String.format("+%.0f%% Ataque (%d turnos)",
-                    (potion.getFuryMultiplier() - 1.0) * 100, potion.getFuryDuration());
-        };
-        Label descLabel = new Label(description);
-        descLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #AAA;");
-
-        Label countLabel = new Label("x" + count);
-        countLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold; -fx-text-fill: #60A5FA;");
-
-        textContent.getChildren().addAll(nameLabel, descLabel, countLabel);
-        btnContent.getChildren().addAll(icon, textContent);
-
-        Button btn = new Button();
-        btn.setGraphic(btnContent);
-        btn.setPrefWidth(250);
-        btn.setPrefHeight(60);
-        btn.setStyle("""
-                -fx-background-color: rgba(40, 40, 50, 0.9);
-                -fx-background-radius: 6;
-                -fx-border-color: #60A5FA;
-                -fx-border-width: 1;
-                -fx-border-radius: 6;
-                """);
-        btn.setOnMouseEntered(e -> btn.setStyle("""
-                -fx-background-color: rgba(60, 60, 70, 0.95);
-                -fx-background-radius: 6;
-                -fx-border-color: #BB86FC;
-                -fx-border-width: 2;
-                -fx-border-radius: 6;
-                """));
-        btn.setOnMouseExited(e -> btn.setStyle("""
-                -fx-background-color: rgba(40, 40, 50, 0.9);
-                -fx-background-radius: 6;
-                -fx-border-color: #60A5FA;
-                -fx-border-width: 1;
-                -fx-border-radius: 6;
-                """));
-
-        btn.setOnAction(e -> {
-            if (inputLocked || engine.snapshot().finished)
-                return;
-            usePotionFromInventory(potion);
-        });
-
-        return btn;
+        
+        if (engine.snapshot().finished) {
+            System.out.println("[INVENTORY] ❌ Batalha finalizada");
+            return;
+        }
+        
+        System.out.println("[INVENTORY] ✅ Usando poção: " + potion.getDisplayName());
+        usePotionFromInventory(potion);
     }
 
     /**
      * Usa uma poção imediatamente a partir do inventário lateral.
      */
     private void usePotionFromInventory(br.puc.battledolls.items.Potion potion) {
+        System.out.println("[DEBUG] usePotionFromInventory() chamado para: " + potion.getDisplayName());
+
         // Fecha o inventário antes de usar a poção
         inventoryVisible = false;
         inventoryPanel.setVisible(false);
+        System.out.println("[DEBUG] Inventário fechado");
+
         // Aplica o efeito
+        System.out.println("[DEBUG] Chamando perform(BattleCommand.usePotion(...))");
         perform(BattleCommand.usePotion(potion));
+        System.out.println("[DEBUG] perform() concluído");
     }
 }
