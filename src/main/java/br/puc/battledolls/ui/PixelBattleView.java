@@ -2,6 +2,7 @@ package br.puc.battledolls.ui;
 
 import br.puc.battledolls.ai.AIController;
 import br.puc.battledolls.combat.Action;
+import br.puc.battledolls.combat.BattleCommand;
 import javafx.animation.AnimationTimer;
 import javafx.animation.PauseTransition;
 import javafx.util.Duration;
@@ -11,9 +12,6 @@ import javafx.scene.Scene;
 import javafx.scene.canvas.Canvas;
 import javafx.scene.canvas.GraphicsContext;
 import javafx.scene.control.Button;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Alert.AlertType;
-import javafx.scene.control.ButtonType;
 import javafx.scene.control.Label;
 import javafx.scene.control.ScrollPane;
 import javafx.scene.effect.DropShadow;
@@ -450,7 +448,7 @@ public class PixelBattleView {
             br.puc.battledolls.model.Player humanPlayer = engine.getEnemyPlayer();
 
             // Escolhe ação usando a IA
-            Action aiAction = aiController.chooseAction(cpuPlayer, humanPlayer);
+            BattleCommand aiAction = aiController.chooseAction(cpuPlayer, humanPlayer);
 
             // Executa a ação
             perform(aiAction);
@@ -966,10 +964,15 @@ public class PixelBattleView {
     }
 
     private void perform(Action a) {
+        perform(BattleCommand.of(a));
+    }
+
+    private void perform(BattleCommand command) {
         var before = engine.snapshot();
+        Action a = command.action();
 
         if (a == Action.DEFEND) {
-            var result = engine.perform(a);
+            var result = engine.perform(command);
             // Cria efeito visual para defesa se necessário
             if (result.event != null && result.event.isDefended) {
                 createVisualEffects(result.event);
@@ -981,7 +984,7 @@ public class PixelBattleView {
 
         // USE_POTION: executa imediatamente sem animação
         if (a == Action.USE_POTION) {
-            var result = engine.perform(a);
+            var result = engine.perform(command);
             // Cria efeito visual da poção
             if (result.event != null) {
                 createVisualEffects(result.event);
@@ -1687,44 +1690,20 @@ public class PixelBattleView {
         btn.setOnAction(e -> {
             if (inputLocked || engine.snapshot().finished)
                 return;
-            confirmAndUsePotion(potion);
+            usePotionFromInventory(potion);
         });
 
         return btn;
     }
 
     /**
-     * Mostra diálogo de confirmação e usa a poção se confirmado.
+     * Usa uma poção imediatamente a partir do inventário lateral.
      */
-    private void confirmAndUsePotion(br.puc.battledolls.items.Potion potion) {
-        String description = switch (potion.type()) {
-            case VIDA -> String.format("Recuperar %d HP?", potion.getHealAmount());
-            case BARRERA -> String.format("Adicionar %d de escudo?", potion.getShieldAmount());
-            case ENERGIA -> String.format("Adicionar %d de carga especial?", potion.getEnergyAmount());
-            case FURIA -> String.format("Aumentar ataque em %.0f%% por %d turnos?",
-                    (potion.getFuryMultiplier() - 1.0) * 100, potion.getFuryDuration());
-        };
-
-        Alert confirmDialog = new Alert(AlertType.CONFIRMATION);
-        confirmDialog.setTitle("Usar Poção");
-        confirmDialog.setHeaderText("Usar " + potion.getDisplayName() + "?");
-        confirmDialog.setContentText(description);
-        confirmDialog.getButtonTypes().setAll(ButtonType.YES, ButtonType.NO);
-
-        // Estiliza o diálogo
-        confirmDialog.getDialogPane().setStyle("""
-                -fx-background-color: rgba(30, 30, 40, 0.98);
-                -fx-text-fill: #EDE9FE;
-                """);
-
-        confirmDialog.showAndWait().ifPresent(response -> {
-            if (response == ButtonType.YES) {
-                // Fecha o inventário antes de usar a poção
-                inventoryVisible = false;
-                inventoryPanel.setVisible(false);
-                // Usa a poção
-                perform(br.puc.battledolls.combat.Action.usePotion(potion));
-            }
-        });
+    private void usePotionFromInventory(br.puc.battledolls.items.Potion potion) {
+        // Fecha o inventário antes de usar a poção
+        inventoryVisible = false;
+        inventoryPanel.setVisible(false);
+        // Aplica o efeito
+        perform(BattleCommand.usePotion(potion));
     }
 }

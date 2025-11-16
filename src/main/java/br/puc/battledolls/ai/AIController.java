@@ -1,6 +1,7 @@
 package br.puc.battledolls.ai;
 
 import br.puc.battledolls.combat.Action;
+import br.puc.battledolls.combat.BattleCommand;
 import br.puc.battledolls.items.Potion;
 import br.puc.battledolls.model.Player;
 import br.puc.battledolls.model.Robot;
@@ -39,7 +40,7 @@ public class AIController {
      * @param enemyPlayer O jogador inimigo (humano)
      * @return A ação escolhida pela IA
      */
-    public Action chooseAction(Player cpuPlayer, Player enemyPlayer) {
+    public BattleCommand chooseAction(Player cpuPlayer, Player enemyPlayer) {
         Robot cpu = cpuPlayer.robot();
         Robot enemy = enemyPlayer.robot();
         
@@ -53,7 +54,7 @@ public class AIController {
         if (cpuHpPercent < 0.25 && rng.nextDouble() < POTION_VIDA_WHEN_CRITICAL) {
             Potion vidaPotion = findBestPotion(availablePotions, Potion.Type.VIDA);
             if (vidaPotion != null) {
-                return Action.usePotion(vidaPotion);
+                return BattleCommand.usePotion(vidaPotion);
             }
         }
         
@@ -61,7 +62,7 @@ public class AIController {
         if (cpuHpPercent < 0.4 && cpu.getShield() == 0 && rng.nextDouble() < POTION_BARRERA_WHEN_LOW) {
             Potion barreiraPotion = findBestPotion(availablePotions, Potion.Type.BARRERA);
             if (barreiraPotion != null) {
-                return Action.usePotion(barreiraPotion);
+                return BattleCommand.usePotion(barreiraPotion);
             }
         }
         
@@ -70,7 +71,7 @@ public class AIController {
             rng.nextDouble() < POTION_ENERGIA_WHEN_NO_SPECIAL) {
             Potion energiaPotion = findBestPotion(availablePotions, Potion.Type.ENERGIA);
             if (energiaPotion != null) {
-                return Action.usePotion(energiaPotion);
+                return BattleCommand.usePotion(energiaPotion);
             }
         }
         
@@ -78,27 +79,27 @@ public class AIController {
         if (cpuHpPercent > 0.5 && !cpu.hasFury() && rng.nextDouble() < POTION_FURIA_WHEN_HEALTHY) {
             Potion furiaPotion = findBestPotion(availablePotions, Potion.Type.FURIA);
             if (furiaPotion != null) {
-                return Action.usePotion(furiaPotion);
+                return BattleCommand.usePotion(furiaPotion);
             }
         }
         
         // Se HP muito baixo, há chance de defender
         if (cpuHpPercent < LOW_HP_THRESHOLD && rng.nextDouble() < DEFEND_WHEN_LOW_HP) {
-            return Action.DEFEND;
+            return BattleCommand.of(Action.DEFEND);
         }
         
         // Se SPECIAL disponível e inimigo com HP baixo, usar SPECIAL
         if (cpu.isSpecialAvailable() && enemyHpPercent < 0.5 && rng.nextDouble() < SPECIAL_WHEN_ENEMY_LOW) {
-            return Action.SPECIAL;
+            return BattleCommand.of(Action.SPECIAL);
         }
         
         // Se SPECIAL disponível e CPU com HP médio/alto, às vezes usar SPECIAL
         if (cpu.isSpecialAvailable() && cpuHpPercent > 0.4 && rng.nextDouble() < 0.3) {
-            return Action.SPECIAL;
+            return BattleCommand.of(Action.SPECIAL);
         }
         
         // Caso padrão: atacar
-        return Action.ATTACK;
+        return BattleCommand.of(Action.ATTACK);
     }
     
     /**
@@ -116,4 +117,3 @@ public class AIController {
         return best;
     }
 }
-

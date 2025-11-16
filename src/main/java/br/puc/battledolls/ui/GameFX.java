@@ -649,12 +649,22 @@ public class GameFX extends Application {
             HBox typeRow = new HBox(10);
             typeRow.setAlignment(Pos.CENTER);
 
-            // Label do tipo
+            // Informações do tipo
+            VBox typeInfo = new VBox(2);
+            typeInfo.setPrefWidth(170);
+
             Label typeLabel = new Label(type.displayName() + ":");
             typeLabel.setTextFill(Color.web("#EDE9FE"));
             typeLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
-            typeLabel.setPrefWidth(120);
-            typeRow.getChildren().add(typeLabel);
+
+            Label typeDesc = new Label(describePotionType(type));
+            typeDesc.setTextFill(Color.web("#C3C7E5"));
+            typeDesc.setStyle("-fx-font-size: 12px;");
+            typeDesc.setWrapText(true);
+            typeDesc.setMaxWidth(160);
+
+            typeInfo.getChildren().addAll(typeLabel, typeDesc);
+            typeRow.getChildren().add(typeInfo);
 
             // Botões para cada nível (1-5)
             for (int level = 1; level <= 5; level++) {
@@ -663,7 +673,7 @@ public class GameFX extends Application {
                 int count = player.getPotionCount(potion);
 
                 Button btn = new Button();
-                btn.setPrefSize(80, 100);
+                btn.setPrefSize(110, 140);
                 btn.setStyle("-fx-background-color: rgba(30,30,30,0.9); -fx-background-radius: 8;");
 
                 VBox btnContent = new VBox(5);
@@ -687,6 +697,15 @@ public class GameFX extends Application {
                 levelLabel.setTextFill(Color.web("#EDE9FE"));
                 levelLabel.setStyle("-fx-font-size: 12px;");
 
+                String description = describePotion(potion);
+                Label descLabel = new Label(description);
+                descLabel.setTextFill(Color.web("#C3C7E5"));
+                descLabel.setStyle("-fx-font-size: 11px;");
+                descLabel.setWrapText(true);
+                descLabel.setAlignment(Pos.CENTER);
+                descLabel.setMaxWidth(90);
+                descLabel.setPrefWidth(90);
+
                 Label costLabel = new Label(cost + "c");
                 costLabel.setTextFill(Color.web("#FFD700"));
                 costLabel.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
@@ -695,7 +714,7 @@ public class GameFX extends Application {
                 countLabel.setTextFill(Color.web("#60A5FA"));
                 countLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
 
-                btnContent.getChildren().addAll(icon, levelLabel, costLabel, countLabel);
+                btnContent.getChildren().addAll(icon, levelLabel, descLabel, costLabel, countLabel);
                 btn.setGraphic(btnContent);
 
                 // Desabilita se não tiver créditos
@@ -706,14 +725,7 @@ public class GameFX extends Application {
                 }
 
                 // Tooltip com descrição
-                String tooltipText = switch (type) {
-                    case VIDA -> String.format("Recupera %d HP", potion.getHealAmount());
-                    case BARRERA -> String.format("Adiciona %d de escudo", potion.getShieldAmount());
-                    case ENERGIA -> String.format("Adiciona %d de carga especial", potion.getEnergyAmount());
-                    case FURIA -> String.format("Aumenta ataque em %.0f%% por %d turnos",
-                            (potion.getFuryMultiplier() - 1.0) * 100, potion.getFuryDuration());
-                };
-                Tooltip tooltip = new Tooltip(tooltipText + "\nCusto: " + cost + " créditos");
+                Tooltip tooltip = new Tooltip(description + "\nCusto: " + cost + " créditos");
                 Tooltip.install(btn, tooltip);
 
                 btn.setOnAction(e -> {
@@ -778,6 +790,25 @@ public class GameFX extends Application {
         rescale.run();
 
         stage.setScene(scene);
+    }
+
+    private String describePotionType(Potion.Type type) {
+        return switch (type) {
+            case VIDA -> "Cura instantânea crescente por nível.";
+            case BARRERA -> "Escudo temporário que absorve dano.";
+            case ENERGIA -> "Recupera cargas para habilidades especiais.";
+            case FURIA -> "Amplia o ataque por vários turnos.";
+        };
+    }
+
+    private String describePotion(Potion potion) {
+        return switch (potion.type()) {
+            case VIDA -> String.format("Recupera %d HP", potion.getHealAmount());
+            case BARRERA -> String.format("+%d Escudo", potion.getShieldAmount());
+            case ENERGIA -> String.format("+%d Energia", potion.getEnergyAmount());
+            case FURIA -> String.format("+%.0f%% Ataque (%dT)",
+                    (potion.getFuryMultiplier() - 1.0) * 100, potion.getFuryDuration());
+        };
     }
 
     // ---- helpers de posicionamento por porcentagem do fundo ----
@@ -925,12 +956,22 @@ public class GameFX extends Application {
             HBox typeRow = new HBox(10);
             typeRow.setAlignment(Pos.CENTER);
 
-            // Label do tipo
+            // Informações do tipo
+            VBox typeInfo = new VBox(2);
+            typeInfo.setPrefWidth(170);
+
             Label typeLabel = new Label(type.displayName() + ":");
             typeLabel.setTextFill(Color.web("#EDE9FE"));
             typeLabel.setStyle("-fx-font-size: 18px; -fx-font-weight: bold;");
-            typeLabel.setPrefWidth(120);
-            typeRow.getChildren().add(typeLabel);
+
+            Label typeDesc = new Label(describePotionType(type));
+            typeDesc.setTextFill(Color.web("#C3C7E5"));
+            typeDesc.setStyle("-fx-font-size: 12px;");
+            typeDesc.setWrapText(true);
+            typeDesc.setMaxWidth(160);
+
+            typeInfo.getChildren().addAll(typeLabel, typeDesc);
+            typeRow.getChildren().add(typeInfo);
 
             // Botões para cada nível (1-5)
             for (int level = 1; level <= 5; level++) {
@@ -939,7 +980,7 @@ public class GameFX extends Application {
                 int count = player.getPotionCount(potion);
 
                 Button btn = new Button();
-                btn.setPrefSize(80, 100);
+                btn.setPrefSize(110, 140);
                 btn.setStyle("-fx-background-color: rgba(30,30,30,0.9); -fx-background-radius: 8;");
 
                 VBox btnContent = new VBox(5);
@@ -963,6 +1004,15 @@ public class GameFX extends Application {
                 levelLabel.setTextFill(Color.web("#EDE9FE"));
                 levelLabel.setStyle("-fx-font-size: 12px;");
 
+                String description = describePotion(potion);
+                Label descLabel = new Label(description);
+                descLabel.setTextFill(Color.web("#C3C7E5"));
+                descLabel.setStyle("-fx-font-size: 11px;");
+                descLabel.setWrapText(true);
+                descLabel.setAlignment(Pos.CENTER);
+                descLabel.setMaxWidth(90);
+                descLabel.setPrefWidth(90);
+
                 Label costLabel = new Label(cost + "c");
                 costLabel.setTextFill(Color.web("#FFD700"));
                 costLabel.setStyle("-fx-font-size: 11px; -fx-font-weight: bold;");
@@ -971,7 +1021,7 @@ public class GameFX extends Application {
                 countLabel.setTextFill(Color.web("#60A5FA"));
                 countLabel.setStyle("-fx-font-size: 14px; -fx-font-weight: bold;");
 
-                btnContent.getChildren().addAll(icon, levelLabel, costLabel, countLabel);
+                btnContent.getChildren().addAll(icon, levelLabel, descLabel, costLabel, countLabel);
                 btn.setGraphic(btnContent);
 
                 // Desabilita se não tiver créditos
@@ -982,14 +1032,7 @@ public class GameFX extends Application {
                 }
 
                 // Tooltip com descrição
-                String tooltipText = switch (type) {
-                    case VIDA -> String.format("Recupera %d HP", potion.getHealAmount());
-                    case BARRERA -> String.format("Adiciona %d de escudo", potion.getShieldAmount());
-                    case ENERGIA -> String.format("Adiciona %d de carga especial", potion.getEnergyAmount());
-                    case FURIA -> String.format("Aumenta ataque em %.0f%% por %d turnos",
-                            (potion.getFuryMultiplier() - 1.0) * 100, potion.getFuryDuration());
-                };
-                Tooltip tooltip = new Tooltip(tooltipText + "\nCusto: " + cost + " créditos");
+                Tooltip tooltip = new Tooltip(description + "\nCusto: " + cost + " créditos");
                 Tooltip.install(btn, tooltip);
 
                 btn.setOnAction(e -> {

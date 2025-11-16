@@ -1,6 +1,7 @@
 package br.puc.battledolls.ui;
 
 import br.puc.battledolls.combat.Action;
+import br.puc.battledolls.combat.BattleCommand;
 import br.puc.battledolls.combat.DamageCalculator;
 import br.puc.battledolls.combat.DamageResult;
 import br.puc.battledolls.items.Potion;
@@ -168,6 +169,20 @@ public class UiBattleEngine {
     }
 
     public StepResult perform(Action action) {
+        if (action == null) {
+            throw new IllegalArgumentException("Action não pode ser nula.");
+        }
+        if (action == Action.USE_POTION) {
+            throw new IllegalArgumentException("Use perform(BattleCommand.usePotion(...)) para poções.");
+        }
+        return perform(BattleCommand.of(action));
+    }
+
+    public StepResult perform(BattleCommand command) {
+        if (command == null) {
+            throw new IllegalArgumentException("Comando não pode ser nulo.");
+        }
+        Action action = command.action();
         List<String> logs = new ArrayList<>();
         BattleEvent event = BattleEvent.none();
         
@@ -192,9 +207,9 @@ public class UiBattleEngine {
                 round, p1.name(), p1.robot().getHp(), p2.name(), p2.robot().getHp()));
 
         boolean isDefending = false;
+        var potion = command.potion();
         switch (action) {
             case USE_POTION -> {
-                Potion potion = action.getPotion();
                 if (potion == null || !current.usePotion(potion)) {
                     logs.add(current.name() + " tentou usar uma poção, mas não possui.");
                     return pack(logs, event);
