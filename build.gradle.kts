@@ -28,7 +28,7 @@ tasks.test {
 
 javafx {
     version = "21"
-    modules = listOf("javafx.controls", "javafx.graphics")
+    modules = listOf("javafx.controls", "javafx.graphics", "javafx.media")
 }
 
 application {

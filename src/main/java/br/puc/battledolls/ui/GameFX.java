@@ -1,5 +1,6 @@
 package br.puc.battledolls.ui;
 
+import br.puc.battledolls.audio.AudioManager;
 import br.puc.battledolls.campaign.CampaignManager;
 import br.puc.battledolls.items.Armor;
 import br.puc.battledolls.items.Potion;
@@ -60,6 +61,7 @@ public class GameFX extends Application {
 
     private GameMode gameMode = GameMode.PVP;
 
+    private final AudioManager audio = AudioManager.getInstance();
     private Stage stage;
     private Player p1, p2;
     private Purchase pur1, pur2;
@@ -92,6 +94,8 @@ public class GameFX extends Application {
     // 1) TELA DE SELEÇÃO DE MODO (nova tela com selection.png)
     // =========================================================
     private void showModeSelectionScreen() {
+        audio.playMenuMusic();
+
         Image bg = load(SELECTION_BG);
         final double IMG_W = bg.getWidth();
         final double IMG_H = bg.getHeight();
@@ -261,6 +265,8 @@ public class GameFX extends Application {
     // 2) TELA DE NOMES (removida seleção de modo daqui)
     // =========================================================
     private void showNameScreen() {
+        audio.playMenuMusic();
+
         Image bg = load(INTRO_BG);
         final double IMG_W = bg.getWidth();
         final double IMG_H = bg.getHeight();
@@ -369,6 +375,8 @@ public class GameFX extends Application {
     }
 
     private void showShopScreen(Player player, boolean isFirstPlayer, boolean isUpgrade) {
+        audio.playMenuMusic();
+
         final int credits = player.credits();
         final Robot baselineRobot = isUpgrade ? player.robot() : null;
         final int existingCost = equipmentCost(baselineRobot);
@@ -923,6 +931,8 @@ public class GameFX extends Application {
      * Mostra loja de poções específica para campanha (entre fases).
      */
     private void showPotionShopScreenForCampaign(Player player) {
+        audio.playMenuMusic();
+
         final int credits = player.credits();
 
         // Fundo
@@ -1093,6 +1103,8 @@ public class GameFX extends Application {
      * Tela de vitória da campanha.
      */
     private void showCampaignCompleteScreen() {
+        audio.playMenuMusic();
+
         Image bg = load(SELECTION_BG);
         final double IMG_W = bg.getWidth();
         final double IMG_H = bg.getHeight();
@@ -1141,6 +1153,8 @@ public class GameFX extends Application {
      * Tela de game over.
      */
     private void showGameOverScreen() {
+        audio.playMenuMusic();
+
         Image bg = load(SELECTION_BG);
         final double IMG_W = bg.getWidth();
         final double IMG_H = bg.getHeight();
@@ -1190,15 +1204,28 @@ public class GameFX extends Application {
         engine = new UiBattleEngine(p1, p2, gameMode == GameMode.PVC);
         // Se for campanha, passa o caminho dos sprites da CPU e a configuração de
         // frames
+        br.puc.battledolls.campaign.CampaignPhase phase = null;
+        if (isCampaign && campaignManager != null) {
+            phase = campaignManager.getCurrentPhase();
+        }
+
         String cpuSpritePath = null;
         br.puc.battledolls.campaign.CPUCharacter.SpriteFrameConfig cpuFrameConfig = null;
-        if (isCampaign && campaignManager != null) {
-            var phase = campaignManager.getCurrentPhase();
-            if (phase != null) {
-                cpuSpritePath = phase.cpuCharacter().spritePath();
-                cpuFrameConfig = phase.cpuCharacter().frameConfig();
-            }
+        if (phase != null) {
+            cpuSpritePath = phase.cpuCharacter().spritePath();
+            cpuFrameConfig = phase.cpuCharacter().frameConfig();
         }
+
+        if (gameMode == GameMode.PVC) {
+            if (phase != null) {
+                audio.playBossMusic(phase.cpuCharacter().name());
+            } else {
+                audio.playDefaultBattleMusic();
+            }
+        } else {
+            audio.playDefaultBattleMusic();
+        }
+
         PixelBattleView pixelView = new PixelBattleView(engine, gameMode == GameMode.PVC,
                 isCampaign ? this : null, cpuSpritePath, cpuFrameConfig);
         Scene battleScene = pixelView.buildScene();

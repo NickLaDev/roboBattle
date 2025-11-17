@@ -1,6 +1,7 @@
 package br.puc.battledolls.ui;
 
 import br.puc.battledolls.ai.AIController;
+import br.puc.battledolls.audio.AudioManager;
 import br.puc.battledolls.combat.Action;
 import br.puc.battledolls.combat.BattleCommand;
 import javafx.animation.AnimationTimer;
@@ -44,6 +45,7 @@ public class PixelBattleView {
     private static final int HIT_OVERLAP = 20; // invade um pouco o centro
 
     private final UiBattleEngine engine;
+    private final AudioManager audio = AudioManager.getInstance();
     private final boolean isPVC; // true se modo Player vs CPU
     private final AIController aiController; // Controlador de IA (null se não for PvC)
     private final GameFX campaignCallback; // Callback para campanha (null se não for campanha)
@@ -674,7 +676,14 @@ public class PixelBattleView {
 
     /** Executa o golpe no IMPACT, decide DEFEND/HURT e liga a anim de ataque. */
     private void startImpact() {
-        var result = engine.perform(pendingAction); // aplica dano, troca turno, etc.
+        Action resolvedAction = pendingAction;
+        var result = engine.perform(resolvedAction); // aplica dano, troca turno, etc.
+
+        if (resolvedAction == Action.SPECIAL) {
+            audio.playSfx(AudioManager.SfxType.SPECIAL);
+        } else if (resolvedAction == Action.ATTACK) {
+            audio.playSfx(AudioManager.SfxType.ATTACK);
+        }
 
         // Cria efeitos visuais baseados no evento
         if (result.event != null) {
@@ -972,6 +981,7 @@ public class PixelBattleView {
 
         if (a == Action.DEFEND) {
             System.out.println("[DEBUG] Executando DEFEND");
+            audio.playSfx(AudioManager.SfxType.DEFEND);
             var result = engine.perform(command);
             // Cria efeito visual para defesa se necessário
             if (result.event != null && result.event.isDefended) {
@@ -1715,10 +1725,17 @@ public class PixelBattleView {
      * Usa uma poção imediatamente a partir do inventário lateral.
      */
     private void usePotionFromInventory(br.puc.battledolls.items.Potion potion) {
-        // Aplica o efeito da poção
+        if (potion == null)
+            return;
+
+        // Aplica o efeito da poção (consome o turno e troca o jogador atual)
         perform(BattleCommand.usePotion(potion));
 
-        // Atualiza o inventário para refletir a mudança
-        updateInventoryPanel();
+        // Fecha o inventário após o uso para impedir interações fora de turno e
+        // evitar mostrar o estoque do oponente
+        if (inventoryVisible) {
+            inventoryVisible = false;
+            inventoryPanel.setVisible(false);
+        }
     }
 }
