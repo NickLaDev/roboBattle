@@ -17,7 +17,6 @@ import javafx.scene.effect.DropShadow;
 import javafx.scene.effect.Glow;
 import javafx.scene.image.Image;
 import javafx.scene.input.KeyCode;
-import javafx.scene.input.MouseButton;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -348,7 +347,7 @@ public class PixelBattleView {
 
         // Painel de inventário (lateral esquerda, abaixo do botão)
         inventoryPanel = createInventoryPanel();
-        inventoryPanel.setVisible(false);
+        inventoryPanel.setVisible(false); // Começa escondido
         inventoryPanel.setLayoutX(15);
         inventoryPanel.setLayoutY(110);
 
@@ -359,18 +358,8 @@ public class PixelBattleView {
         overlay.setTop(bannerBox);
         overlay.setBottom(bottomBox);
 
-        // Adiciona elementos na ordem correta: overlay primeiro, depois botão e painel (que ficam acima)
+        // Adiciona elementos na ordem correta: overlay primeiro, depois botão e painel
         root.getChildren().addAll(overlay, btnInventory, inventoryPanel);
-        
-        // GARANTE ABSOLUTAMENTE que o painel de inventário e botão recebem eventos de mouse
-        btnInventory.setMouseTransparent(false);
-        btnInventory.setPickOnBounds(true);
-        inventoryPanel.setMouseTransparent(false);
-        inventoryPanel.setPickOnBounds(true);
-        
-        // Garante que o root também não bloqueia
-        root.setMouseTransparent(false);
-        root.setPickOnBounds(true);
 
         Scene scene = new Scene(root, BASE_W, BASE_H, Color.BLACK);
 
@@ -419,15 +408,7 @@ public class PixelBattleView {
                 btnDef.setDisable(finished || inputLocked || isCPUTurn);
                 btnSpc.setDisable(finished || inputLocked || isCPUTurn || !s.currentSpecial);
 
-                // Atualiza disponibilidade de inventário
-                var currentPlayer = engine.getCurrentPlayer();
-                boolean hasPotions = currentPlayer != null && !currentPlayer.getAvailablePotions().isEmpty();
-                btnInventory.setDisable(finished || inputLocked || isCPUTurn || !hasPotions);
-
-                // Atualiza o painel de inventário se estiver visível
-                if (inventoryVisible) {
-                    updateInventoryPanel();
-                }
+                // Inventário sempre visível - não precisa mais atualizar a cada frame
 
                 // Se for vez da CPU e não estiver bloqueado, executa ação da IA
                 if (isCPUTurn && !inputLocked && !finished && phase == Phase.NONE) {
@@ -436,6 +417,10 @@ public class PixelBattleView {
             }
         };
         loop.start();
+
+        // Atualiza o inventário no início da batalha
+        updateInventoryPanel();
+
         return scene;
     }
 
@@ -1525,16 +1510,12 @@ public class PixelBattleView {
         // Cabeçalho com título e botão fechar
         HBox header = new HBox(10);
         header.setAlignment(Pos.CENTER_LEFT);
-        header.setMouseTransparent(false);
-        header.setPickOnBounds(true);
-        
+
         Label title = new Label("INVENTÁRIO");
         title.setStyle("-fx-font-size: 18px; -fx-font-weight: bold; -fx-text-fill: #BB86FC;");
-        title.setMouseTransparent(true);
 
         Region spacer = new Region();
         HBox.setHgrow(spacer, Priority.ALWAYS);
-        spacer.setMouseTransparent(true);
 
         Button btnClose = new Button("✕");
         btnClose.setStyle("""
@@ -1547,30 +1528,7 @@ public class PixelBattleView {
                 -fx-min-width: 30;
                 -fx-min-height: 30;
                 """);
-        btnClose.setMouseTransparent(false);
-        btnClose.setPickOnBounds(true);
-        btnClose.setOnMouseEntered(e -> btnClose.setStyle("""
-                -fx-background-color: rgba(255, 70, 70, 0.9);
-                -fx-text-fill: white;
-                -fx-font-size: 14px;
-                -fx-font-weight: bold;
-                -fx-padding: 4 8;
-                -fx-background-radius: 4;
-                -fx-min-width: 30;
-                -fx-min-height: 30;
-                """));
-        btnClose.setOnMouseExited(e -> btnClose.setStyle("""
-                -fx-background-color: rgba(200, 50, 50, 0.8);
-                -fx-text-fill: white;
-                -fx-font-size: 14px;
-                -fx-font-weight: bold;
-                -fx-padding: 4 8;
-                -fx-background-radius: 4;
-                -fx-min-width: 30;
-                -fx-min-height: 30;
-                """));
         btnClose.setOnAction(e -> {
-            System.out.println("[INVENTORY] Botão fechar clicado");
             inventoryVisible = false;
             inventoryPanel.setVisible(false);
         });
@@ -1612,38 +1570,28 @@ public class PixelBattleView {
      * Atualiza o conteúdo do painel de inventário - VERSÃO COMPLETAMENTE REWRITTEN.
      */
     private void updateInventoryPanel() {
-        System.out.println("[INVENTORY] updateInventoryPanel() chamado");
-        
         var currentPlayer = engine.getCurrentPlayer();
-        if (currentPlayer == null) {
-            System.out.println("[INVENTORY] ❌ currentPlayer é null");
+        if (currentPlayer == null)
             return;
-        }
 
         VBox potionContainer = (VBox) inventoryPanel.getUserData();
-        if (potionContainer == null) {
-            System.out.println("[INVENTORY] ❌ potionContainer é null");
+        if (potionContainer == null)
             return;
-        }
-        
+
         potionContainer.getChildren().clear();
-        System.out.println("[INVENTORY] Container limpo");
 
         var availablePotions = currentPlayer.getAvailablePotions();
-        System.out.println("[INVENTORY] Poções disponíveis: " + availablePotions.size());
-        
+
         if (availablePotions.isEmpty()) {
             Label empty = new Label("Nenhuma poção disponível");
             empty.setStyle("-fx-text-fill: #888; -fx-font-size: 14px;");
-            empty.setMouseTransparent(true);
             potionContainer.getChildren().add(empty);
             return;
         }
 
-        // Cria botões para cada poção - VERSÃO ULTRA SIMPLIFICADA
+        // Cria botões para cada poção com ícone
         for (br.puc.battledolls.items.Potion potion : availablePotions) {
             int count = currentPlayer.getPotionCount(potion);
-            System.out.println("[INVENTORY] Criando botão para: " + potion.getDisplayName() + " (x" + count + ")");
 
             // Descrição
             String description = switch (potion.type()) {
@@ -1653,21 +1601,51 @@ public class PixelBattleView {
                 case FURIA -> String.format("+%.0f%% Atk", (potion.getFuryMultiplier() - 1.0) * 100);
             };
 
-            // Button - CONFIGURAÇÃO MÁXIMA PARA CLICABILIDADE
+            // Cria conteúdo com ícone
+            HBox btnContent = new HBox(10);
+            btnContent.setAlignment(Pos.CENTER_LEFT);
+            btnContent.setMouseTransparent(true); // CRÍTICO: não bloquear eventos
+
+            // Ícone da poção
+            javafx.scene.image.ImageView icon = new javafx.scene.image.ImageView();
+            icon.setMouseTransparent(true);
+            try {
+                javafx.scene.image.Image potionImg = new javafx.scene.image.Image(
+                        getClass().getResourceAsStream(potion.getSpritePath()));
+                if (potionImg != null) {
+                    icon.setImage(potionImg);
+                    icon.setFitWidth(32);
+                    icon.setFitHeight(32);
+                    icon.setPreserveRatio(true);
+                }
+            } catch (Exception e) {
+                // Fallback se não carregar
+            }
+
+            // Texto da poção
+            VBox textContent = new VBox(2);
+            textContent.setMouseTransparent(true);
+
+            Label nameLabel = new Label(potion.getDisplayName());
+            nameLabel.setStyle("-fx-font-size: 12px; -fx-font-weight: bold; -fx-text-fill: #EDE9FE;");
+            nameLabel.setMouseTransparent(true);
+
+            Label descLabel = new Label(description + " • x" + count);
+            descLabel.setStyle("-fx-font-size: 10px; -fx-text-fill: #AAA;");
+            descLabel.setMouseTransparent(true);
+
+            textContent.getChildren().addAll(nameLabel, descLabel);
+            btnContent.getChildren().addAll(icon, textContent);
+
+            // Button com gráfico
             Button potionButton = new Button();
-            potionButton.setText(String.format("[x%d] %s (%s)", count, potion.getDisplayName(), description));
+            potionButton.setGraphic(btnContent);
             potionButton.setPrefWidth(250);
-            potionButton.setPrefHeight(45);
-            potionButton.setMinWidth(250);
-            potionButton.setMinHeight(45);
-            potionButton.setMaxWidth(250);
-            potionButton.setMaxHeight(45);
-            
+            potionButton.setPrefHeight(55);
+
             // CRÍTICO: Garantir que o botão recebe eventos
             potionButton.setMouseTransparent(false);
             potionButton.setPickOnBounds(true);
-            potionButton.setDisable(false);
-            potionButton.setFocusTraversable(true);
             
             potionButton.setStyle("""
                     -fx-background-color: rgba(60, 50, 80, 0.9);
@@ -1689,27 +1667,10 @@ public class PixelBattleView {
             final br.puc.battledolls.items.Potion finalPotion = potion; // Final para lambda
             
             // onAction (principal)
-            potionButton.setOnAction(e -> {
-                System.out.println("[INVENTORY] ✅ onAction disparado para: " + finalPotion.getDisplayName());
-                handlePotionClick(finalPotion);
-            });
-            
-            // onMouseClicked (backup)
-            potionButton.setOnMouseClicked(e -> {
-                System.out.println("[INVENTORY] ✅ onMouseClicked disparado para: " + finalPotion.getDisplayName());
-                if (e.getButton() == MouseButton.PRIMARY) {
-                    handlePotionClick(finalPotion);
-                }
-            });
-            
-            // onMousePressed (backup extra)
-            potionButton.setOnMousePressed(e -> {
-                System.out.println("[INVENTORY] ✅ onMousePressed disparado para: " + finalPotion.getDisplayName());
-            });
+            potionButton.setOnAction(e -> handlePotionClick(finalPotion));
 
-            // Efeito hover
+            // Efeito hover suave
             potionButton.setOnMouseEntered(e -> {
-                System.out.println("[INVENTORY] Mouse entrou no botão: " + finalPotion.getDisplayName());
                 potionButton.setStyle("""
                         -fx-background-color: rgba(100, 80, 130, 0.95);
                         -fx-text-fill: #FFFFFF;
@@ -1719,8 +1680,6 @@ public class PixelBattleView {
                         -fx-border-width: 3;
                         -fx-border-radius: 6;
                         -fx-padding: 10;
-                        -fx-alignment: CENTER_LEFT;
-                        -fx-content-display: LEFT;
                         -fx-cursor: hand;
                         """);
             });
@@ -1735,35 +1694,20 @@ public class PixelBattleView {
                         -fx-border-width: 2;
                         -fx-border-radius: 6;
                         -fx-padding: 10;
-                        -fx-alignment: CENTER_LEFT;
-                        -fx-content-display: LEFT;
                         """);
             });
 
             potionContainer.getChildren().add(potionButton);
-            System.out.println("[INVENTORY] Botão adicionado ao container");
         }
-        
-        System.out.println("[INVENTORY] Total de botões criados: " + potionContainer.getChildren().size());
     }
     
     /**
      * Handler centralizado para cliques em poções.
      */
     private void handlePotionClick(br.puc.battledolls.items.Potion potion) {
-        System.out.println("[INVENTORY] handlePotionClick() chamado para: " + potion.getDisplayName());
-        
-        if (inputLocked) {
-            System.out.println("[INVENTORY] ❌ inputLocked = true");
+        if (inputLocked || engine.snapshot().finished)
             return;
-        }
-        
-        if (engine.snapshot().finished) {
-            System.out.println("[INVENTORY] ❌ Batalha finalizada");
-            return;
-        }
-        
-        System.out.println("[INVENTORY] ✅ Usando poção: " + potion.getDisplayName());
+
         usePotionFromInventory(potion);
     }
 
@@ -1771,16 +1715,10 @@ public class PixelBattleView {
      * Usa uma poção imediatamente a partir do inventário lateral.
      */
     private void usePotionFromInventory(br.puc.battledolls.items.Potion potion) {
-        System.out.println("[DEBUG] usePotionFromInventory() chamado para: " + potion.getDisplayName());
-
-        // Fecha o inventário antes de usar a poção
-        inventoryVisible = false;
-        inventoryPanel.setVisible(false);
-        System.out.println("[DEBUG] Inventário fechado");
-
-        // Aplica o efeito
-        System.out.println("[DEBUG] Chamando perform(BattleCommand.usePotion(...))");
+        // Aplica o efeito da poção
         perform(BattleCommand.usePotion(potion));
-        System.out.println("[DEBUG] perform() concluído");
+
+        // Atualiza o inventário para refletir a mudança
+        updateInventoryPanel();
     }
 }
