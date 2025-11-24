@@ -265,7 +265,7 @@ public class GameFX extends Application {
     // 2) TELA DE NOMES (removida seleção de modo daqui)
     // =========================================================
     private void showNameScreen() {
-        audio.playMenuMusic();
+        // Música de menu continua tocando (não reinicia)
 
         Image bg = load(INTRO_BG);
         final double IMG_W = bg.getWidth();
@@ -375,7 +375,7 @@ public class GameFX extends Application {
     }
 
     private void showShopScreen(Player player, boolean isFirstPlayer, boolean isUpgrade) {
-        audio.playMenuMusic();
+        // Música de menu continua tocando (não reinicia)
 
         final int credits = player.credits();
         final Robot baselineRobot = isUpgrade ? player.robot() : null;
@@ -931,7 +931,7 @@ public class GameFX extends Application {
      * Mostra loja de poções específica para campanha (entre fases).
      */
     private void showPotionShopScreenForCampaign(Player player) {
-        audio.playMenuMusic();
+        // Música de menu continua tocando (não reinicia)
 
         final int credits = player.credits();
 

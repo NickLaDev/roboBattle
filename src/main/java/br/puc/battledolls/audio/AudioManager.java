@@ -29,6 +29,7 @@ public final class AudioManager {
     private final Map<SfxType, AudioClip> sfxClips = new EnumMap<>(SfxType.class);
 
     private MediaPlayer currentMusic;
+    private String currentMusicResource; // Rastreia qual música está tocando
     private double musicVolume = 0.55;
     private double sfxVolume = 0.8;
 
@@ -88,6 +89,13 @@ public final class AudioManager {
             stopMusic();
             return;
         }
+        
+        // Se a mesma música já está tocando, não reinicia
+        if (currentMusicResource != null && currentMusicResource.equals(resource) 
+            && currentMusic != null && currentMusic.getStatus() == MediaPlayer.Status.PLAYING) {
+            return;
+        }
+        
         Media media = loadMedia(resource);
         if (media == null)
             return;
@@ -96,6 +104,7 @@ public final class AudioManager {
         currentMusic = new MediaPlayer(media);
         currentMusic.setCycleCount(MediaPlayer.INDEFINITE);
         currentMusic.setVolume(musicVolume);
+        currentMusicResource = resource; // Rastreia a música atual
         currentMusic.play();
     }
 
@@ -121,6 +130,7 @@ public final class AudioManager {
             currentMusic.stop();
             currentMusic.dispose();
             currentMusic = null;
+            currentMusicResource = null;
         }
     }
 
