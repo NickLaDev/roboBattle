@@ -16,8 +16,16 @@ public final class AudioManager {
 
     public enum SfxType {
         ATTACK,
+        ATTACK1,
+        ATTACK2,
         DEFEND,
-        SPECIAL
+        DEFEND1,
+        DEFEND2,
+        CRITICAL,
+        CRITICAL1,
+        CRITICAL2,
+        SPECIAL,
+        SPECIAL_ESPADAS
     }
 
     private static final String MENU_THEME = "/assets/audio/awesomeness.wav";
@@ -32,6 +40,7 @@ public final class AudioManager {
     private String currentMusicResource; // Rastreia qual música está tocando
     private double musicVolume = 0.55;
     private double sfxVolume = 0.8;
+    private final java.util.Random rng = new java.util.Random();
 
     private AudioManager() {
         registerBossThemes();
@@ -50,9 +59,25 @@ public final class AudioManager {
     }
 
     private void loadSfx() {
+        // Sons antigos (mantidos para compatibilidade)
         loadClip(SfxType.ATTACK, "/assets/audio/sfx_attack.wav");
         loadClip(SfxType.DEFEND, "/assets/audio/sfx_defend.wav");
         loadClip(SfxType.SPECIAL, "/assets/audio/sfx_special.wav");
+        
+        // Novos sons de ataque
+        loadClip(SfxType.ATTACK1, "/assets/audio/ataque1.mp3");
+        loadClip(SfxType.ATTACK2, "/assets/audio/ataque2.mp3");
+        
+        // Novos sons de defesa
+        loadClip(SfxType.DEFEND1, "/assets/audio/defesa1.mp3");
+        loadClip(SfxType.DEFEND2, "/assets/audio/defesa2.mp3");
+        
+        // Novos sons de crítico
+        loadClip(SfxType.CRITICAL1, "/assets/audio/criticio.mp3");
+        loadClip(SfxType.CRITICAL2, "/assets/audio/critico2.mp3");
+        
+        // Novo som de habilidade especial
+        loadClip(SfxType.SPECIAL_ESPADAS, "/assets/audio/especial_Espasdas.mp3");
     }
 
     private void loadClip(SfxType type, String resource) {
@@ -139,6 +164,33 @@ public final class AudioManager {
         if (clip != null) {
             clip.play(sfxVolume);
         }
+    }
+    
+    /**
+     * Toca uma variação aleatória de ataque (ataque1 ou ataque2).
+     */
+    public void playRandomAttack() {
+        SfxType[] attacks = {SfxType.ATTACK1, SfxType.ATTACK2};
+        SfxType chosen = attacks[rng.nextInt(attacks.length)];
+        playSfx(chosen);
+    }
+    
+    /**
+     * Toca uma variação aleatória de defesa (defesa1 ou defesa2).
+     */
+    public void playRandomDefend() {
+        SfxType[] defends = {SfxType.DEFEND1, SfxType.DEFEND2};
+        SfxType chosen = defends[rng.nextInt(defends.length)];
+        playSfx(chosen);
+    }
+    
+    /**
+     * Toca uma variação aleatória de crítico (criticio ou critico2).
+     */
+    public void playRandomCritical() {
+        SfxType[] criticals = {SfxType.CRITICAL1, SfxType.CRITICAL2};
+        SfxType chosen = criticals[rng.nextInt(criticals.length)];
+        playSfx(chosen);
     }
 
     public void setMusicVolume(double volume) {

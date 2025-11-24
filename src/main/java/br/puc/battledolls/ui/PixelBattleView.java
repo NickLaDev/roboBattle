@@ -679,15 +679,23 @@ public class PixelBattleView {
         Action resolvedAction = pendingAction;
         var result = engine.perform(resolvedAction); // aplica dano, troca turno, etc.
 
+        // Toca sons apropriados
         if (resolvedAction == Action.SPECIAL) {
-            audio.playSfx(AudioManager.SfxType.SPECIAL);
+            // Toca som da habilidade especial
+            audio.playSfx(AudioManager.SfxType.SPECIAL_ESPADAS);
         } else if (resolvedAction == Action.ATTACK) {
-            audio.playSfx(AudioManager.SfxType.ATTACK);
+            // Toca variação aleatória de ataque
+            audio.playRandomAttack();
         }
 
         // Cria efeitos visuais baseados no evento
         if (result.event != null) {
             createVisualEffects(result.event);
+            
+            // Se foi crítico, toca som de crítico
+            if (result.event.isCritical) {
+                audio.playRandomCritical();
+            }
         }
 
         // Se acabou a luta, a sequência encerra
@@ -981,7 +989,8 @@ public class PixelBattleView {
 
         if (a == Action.DEFEND) {
             System.out.println("[DEBUG] Executando DEFEND");
-            audio.playSfx(AudioManager.SfxType.DEFEND);
+            // Toca variação aleatória de defesa
+            audio.playRandomDefend();
             var result = engine.perform(command);
             // Cria efeito visual para defesa se necessário
             if (result.event != null && result.event.isDefended) {
