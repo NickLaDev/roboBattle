@@ -9,6 +9,10 @@ public class DamageCalculator {
     private final Random rng = new Random();
 
     public DamageResult compute(Robot attacker, Robot defender, boolean useSpecial) {
+        return compute(attacker, defender, useSpecial, 1.5); // Multiplicador padrão
+    }
+    
+    public DamageResult compute(Robot attacker, Robot defender, boolean useSpecial, double specialMultiplier) {
         RobotStats a = attacker.stats(), d = defender.stats();
 
         int rolledAttack = (int) Math.round(a.atk * (0.95 + 0.10 * rng.nextDouble())); // ±5%
@@ -31,8 +35,10 @@ public class DamageCalculator {
         boolean critical = rng.nextDouble() < a.crit;
         if (critical) raw *= 1.5;
 
-        // Special (Bateria)
-        if (useSpecial) raw *= 1.5;
+        // Special (Bateria) - usa multiplicador customizado da timing bar
+        if (useSpecial) {
+            raw *= specialMultiplier;
+        }
 
         int finalDamage = (int) Math.max(1, Math.round(raw));
 

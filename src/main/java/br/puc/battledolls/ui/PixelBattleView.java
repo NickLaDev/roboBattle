@@ -21,6 +21,7 @@ import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
+import javafx.scene.text.FontWeight;
 import javafx.scene.text.Text;
 
 import java.io.InputStream;
@@ -48,6 +49,7 @@ public class PixelBattleView {
     private final AudioManager audio = AudioManager.getInstance();
     private final boolean isPVC; // true se modo Player vs CPU
     private final AIController aiController; // Controlador de IA (null se não for PvC)
+    private Pane rootPane; // Referência ao root para garantir foco
     private final GameFX campaignCallback; // Callback para campanha (null se não for campanha)
     private final String cpuSpritePath; // Caminho base dos sprites da CPU (null se não for campanha)
     private final br.puc.battledolls.campaign.CPUCharacter.SpriteFrameConfig cpuFrameConfig; // Configuração de frames
@@ -120,6 +122,36 @@ public class PixelBattleView {
     private double approachTarget = 0;
     private boolean specialSoundPlayed = false; // Controla se o som de especial já foi tocado nesta fase
     private double attackTimer = 0;
+    
+    // Skill Check para especial
+    private enum SkillCheckType {
+        TIMING_BAR,
+        RAPID_TAPS
+    }
+    
+    private SkillCheckType currentSkillCheck = null;
+    
+    // Timing Bar
+    private boolean timingBarActive = false;
+    private double timingBarPosition = 0.0; // 0.0 a 1.0 (0 = esquerda, 1 = direita)
+    private double timingBarSpeed = 1.5; // velocidade do indicador (ciclos por segundo)
+    private boolean timingBarDirection = true; // true = direita, false = esquerda
+    private boolean timingBarHit = false; // se o jogador já acertou
+    private boolean timingBarAttempted = false; // se o jogador já tentou (pressionou ESPAÇO)
+    
+    // Rapid Taps
+    private boolean rapidTapsActive = false;
+    private int rapidTapsCount = 0; // contador de taps
+    private double rapidTapsTimer = 0.0; // timer para os taps
+    private static final double RAPID_TAPS_DURATION = 2.0; // 2 segundos para apertar
+    private boolean rapidTapsAttempted = false; // se o jogador já tentou
+    
+    // Comum para ambos
+    private double specialMultiplier = 1.5; // multiplicador padrão (será ajustado pelo skill check)
+    private String skillCheckFeedback = ""; // feedback visual ("PERFEITO!", "BOM!", etc)
+    private double skillCheckFeedbackTimer = 0.0; // timer para esconder feedback
+    private double skillCheckTimeout = 0.0; // timeout caso jogador não tente
+    private static final double SKILL_CHECK_MAX_TIME = 5.0; // máximo 5 segundos para tentar
 
     // Timeout de segurança para desbloquear input se algo der errado
     private double inputLockedTimer = 0;
@@ -264,6 +296,7 @@ public class PixelBattleView {
 
         // ===== Overlay =====
         Pane root = new Pane(canvas);
+        rootPane = root; // Armazena referência
 
         // Banner central superior
         lblTurn = new Label();
@@ -365,11 +398,38 @@ public class PixelBattleView {
         root.getChildren().addAll(overlay, btnInventory, inventoryPanel);
 
         Scene scene = new Scene(root, BASE_W, BASE_H, Color.BLACK);
-
-        // Atalhos 1/2/3
-        scene.setOnKeyPressed(ev -> {
-            if (inputLocked || engine.snapshot().finished)
+        
+        // Garante que o root pode receber foco e eventos de teclado
+        root.setFocusTraversable(true);
+        root.requestFocus();
+        
+        // Handler de teclado no root (prioridade)
+        root.setOnKeyPressed(ev -> {
+            System.out.println("[DEBUG] Tecla pressionada no root: " + ev.getCode() + " | currentSkillCheck: " + currentSkillCheck);
+            
+            if (engine.snapshot().finished)
                 return;
+            
+            // Skill check ativo: ESPAÇO acerta (prioridade máxima)
+            if (currentSkillCheck != null) {
+                boolean attempted = (currentSkillCheck == SkillCheckType.TIMING_BAR) ? timingBarAttempted : rapidTapsAttempted;
+                
+                if (!attempted && ev.getCode() == KeyCode.SPACE) {
+                    System.out.println("[DEBUG] ESPAÇO detectado no root - acertando skill check!");
+                    ev.consume();
+                    
+                    if (currentSkillCheck == SkillCheckType.TIMING_BAR) {
+                        hitTimingBar();
+                    } else {
+                        hitRapidTaps();
+                    }
+                    return;
+                }
+            }
+            
+            if (inputLocked)
+                return;
+                
             if (ev.getCode() == KeyCode.DIGIT1)
                 btnAtk.fire();
             else if (ev.getCode() == KeyCode.DIGIT2)
@@ -377,6 +437,67 @@ public class PixelBattleView {
             else if (ev.getCode() == KeyCode.DIGIT3 && !btnSpc.isDisabled())
                 btnSpc.fire();
         });
+
+        // Atalhos 1/2/3 e ESPAÇO para skill check (backup na scene)
+        scene.setOnKeyPressed(ev -> {
+            System.out.println("[DEBUG] Tecla pressionada na scene: " + ev.getCode() + " | currentSkillCheck: " + currentSkillCheck);
+            
+            if (engine.snapshot().finished)
+                return;
+            
+            // Skill check ativo: ESPAÇO acerta (prioridade máxima, não precisa verificar inputLocked)
+            if (currentSkillCheck != null) {
+                boolean attempted = (currentSkillCheck == SkillCheckType.TIMING_BAR) ? timingBarAttempted : rapidTapsAttempted;
+                
+                if (!attempted && ev.getCode() == KeyCode.SPACE) {
+                    System.out.println("[DEBUG] ESPAÇO detectado na scene - acertando skill check!");
+                    ev.consume(); // Consome o evento para evitar processamento adicional
+                    
+                    if (currentSkillCheck == SkillCheckType.TIMING_BAR) {
+                        hitTimingBar();
+                    } else {
+                        hitRapidTaps();
+                    }
+                    return;
+                }
+            }
+            
+            if (inputLocked)
+                return;
+                
+            if (ev.getCode() == KeyCode.DIGIT1)
+                btnAtk.fire();
+            else if (ev.getCode() == KeyCode.DIGIT2)
+                btnDef.fire();
+            else if (ev.getCode() == KeyCode.DIGIT3 && !btnSpc.isDisabled())
+                btnSpc.fire();
+        });
+        
+        // Também adiciona listener de key released para garantir detecção
+        scene.setOnKeyReleased(ev -> {
+            if (engine.snapshot().finished)
+                return;
+            
+            // Skill check ativo: ESPAÇO acerta (backup no key released)
+            if (currentSkillCheck != null) {
+                boolean attempted = (currentSkillCheck == SkillCheckType.TIMING_BAR) ? timingBarAttempted : rapidTapsAttempted;
+                
+                if (!attempted && ev.getCode() == KeyCode.SPACE) {
+                    System.out.println("[DEBUG] ESPAÇO detectado no key released!");
+                    ev.consume();
+                    
+                    if (currentSkillCheck == SkillCheckType.TIMING_BAR) {
+                        hitTimingBar();
+                    } else {
+                        hitRapidTaps();
+                    }
+                }
+            }
+        });
+        
+        // Garante que o canvas não bloqueia eventos (mas não recebe foco)
+        canvas.setFocusTraversable(false);
+        canvas.setMouseTransparent(false);
 
         // ==== GAME LOOP ====
         loop = new AnimationTimer() {
@@ -564,32 +685,150 @@ public class PixelBattleView {
         // Cinemática de corrida
         switch (phase) {
             case APPROACH -> {
-                if (attackerIsP1) {
-                    anim1Run.update(dt);
-                    r1OffsetX = clamp(r1OffsetX + RUN_SPEED * dt, 0, approachTarget);
-                    
-                    // Toca som de especial um pouco antes do impacto (a 70% do caminho)
-                    if (pendingAction == Action.SPECIAL && !specialSoundPlayed && 
-                        r1OffsetX >= approachTarget * 0.7) {
-                        audio.playSfx(AudioManager.SfxType.SPECIAL_ESPADAS, 1.5); // 1.5x velocidade
-                        specialSoundPlayed = true;
+                // Atualiza timing bar se for especial e for o turno do jogador humano
+                var currentSnap = engine.snapshot();
+                boolean isPlayerTurn = currentSnap.currentName.equals(leftName); // leftName é sempre o jogador humano
+                boolean isSpecial = pendingAction == Action.SPECIAL;
+                
+                if (isSpecial && isPlayerTurn) {
+                    if (currentSkillCheck == null) {
+                        // Escolhe aleatoriamente entre Timing Bar e Rapid Taps
+                        currentSkillCheck = rng.nextBoolean() ? SkillCheckType.TIMING_BAR : SkillCheckType.RAPID_TAPS;
+                        
+                        if (currentSkillCheck == SkillCheckType.TIMING_BAR) {
+                            timingBarActive = true;
+                            timingBarPosition = 0.0;
+                            timingBarDirection = true;
+                            timingBarHit = false;
+                            timingBarAttempted = false;
+                        } else {
+                            rapidTapsActive = true;
+                            rapidTapsCount = 0;
+                            rapidTapsTimer = 0.0;
+                            rapidTapsAttempted = false;
+                        }
+                        
+                        specialMultiplier = 1.5; // padrão
+                        skillCheckFeedback = "";
+                        skillCheckTimeout = 0.0;
+                        specialSoundPlayed = false; // Reset para tocar depois da tentativa
                     }
                     
-                    if (r1OffsetX >= approachTarget - 1e-3)
-                        startImpact();
+                    // Atualiza o skill check ativo
+                    if (currentSkillCheck == SkillCheckType.TIMING_BAR) {
+                        updateTimingBar(dt);
+                    } else {
+                        updateRapidTaps(dt);
+                    }
+                    
+                    // Recalcula attempted APÓS atualizar (para pegar mudanças do updateRapidTaps)
+                    // Timeout: se jogador não tentar em 5 segundos, usa multiplicador padrão
+                    boolean attempted = (currentSkillCheck == SkillCheckType.TIMING_BAR) ? timingBarAttempted : rapidTapsAttempted;
+                    if (!attempted) {
+                        skillCheckTimeout += dt;
+                        if (skillCheckTimeout >= SKILL_CHECK_MAX_TIME) {
+                            // Força tentativa com multiplicador padrão (penalidade por não tentar)
+                            specialMultiplier = 1.0; // Penalidade por não tentar
+                            if (currentSkillCheck == SkillCheckType.TIMING_BAR) {
+                                timingBarAttempted = true;
+                                timingBarHit = true;
+                            } else {
+                                rapidTapsAttempted = true;
+                            }
+                            skillCheckFeedback = "PERDEU!";
+                            skillCheckFeedbackTimer = 1.5;
+                            
+                            // NÃO toca som aqui - o som será tocado quando a animação começar
+                        }
+                    }
+                    
+                    // Só continua a animação após o jogador tentar/finalizar
+                    // Recalcula attempted após atualizar (para pegar mudanças do updateRapidTaps quando tempo acaba)
+                    attempted = (currentSkillCheck == SkillCheckType.TIMING_BAR) ? timingBarAttempted : rapidTapsAttempted;
+                    
+                    if (attempted) {
+                        // Delay para mostrar feedback antes de continuar
+                        // Timing Bar: 0.3s de delay
+                        // Rapid Taps: 0.8s de delay para mostrar resultado
+                        double delayThreshold = (currentSkillCheck == SkillCheckType.TIMING_BAR) ? 0.3 : 0.8;
+                        
+                        if (skillCheckFeedbackTimer > delayThreshold) {
+                            return; // Ainda mostrando feedback
+                        }
+                        
+                        // Garante foco no root para capturar teclas
+                        if (rootPane != null && rootPane.getScene() != null && !rootPane.isFocused()) {
+                            rootPane.requestFocus();
+                        }
+                        
+                        // Toca som de especial quando a animação realmente começa (não quando skill check finaliza)
+                        if (!specialSoundPlayed) {
+                            audio.playSfx(AudioManager.SfxType.SPECIAL_ESPADAS, 1.5);
+                            specialSoundPlayed = true;
+                        }
+                        
+                        // Continua animação normalmente
+                        if (attackerIsP1) {
+                            anim1Run.update(dt);
+                            r1OffsetX = clamp(r1OffsetX + RUN_SPEED * dt, 0, approachTarget);
+                            if (r1OffsetX >= approachTarget - 1e-3)
+                                startImpact();
+                        } else {
+                            anim2Run.update(dt);
+                            r2OffsetX = clamp(r2OffsetX - RUN_SPEED * dt, -approachTarget, 0);
+                            if (Math.abs(r2OffsetX + approachTarget) <= 1e-3)
+                                startImpact();
+                        }
+                    } else {
+                        // Pausa animação enquanto espera tentativa do jogador
+                        // Garante foco no root para capturar teclas
+                        if (rootPane != null && rootPane.getScene() != null && !rootPane.isFocused()) {
+                            rootPane.requestFocus();
+                        }
+                        // Não atualiza r1OffsetX ou r2OffsetX
+                    }
                 } else {
-                    anim2Run.update(dt);
-                    r2OffsetX = clamp(r2OffsetX - RUN_SPEED * dt, -approachTarget, 0);
-                    
-                    // Toca som de especial um pouco antes do impacto (a 70% do caminho)
-                    if (pendingAction == Action.SPECIAL && !specialSoundPlayed && 
-                        Math.abs(r2OffsetX + approachTarget) <= approachTarget * 0.3) {
-                        audio.playSfx(AudioManager.SfxType.SPECIAL_ESPADAS, 1.5); // 1.5x velocidade
-                        specialSoundPlayed = true;
+                    // Não é especial ou é CPU - animação normal
+                    // Para CPU com especial, decide aleatoriamente o multiplicador
+                    if (isSpecial && !isPlayerTurn && isPVC) {
+                        // CPU: escolhe aleatoriamente se conseguiu ou não
+                        boolean cpuSucceeded = rng.nextBoolean();
+                        if (cpuSucceeded) {
+                            // CPU conseguiu: multiplicador aleatório entre 1.5 e 2.0
+                            specialMultiplier = 1.5 + (rng.nextDouble() * 0.5);
+                        } else {
+                            // CPU falhou: multiplicador 1.0
+                            specialMultiplier = 1.0;
+                        }
                     }
                     
-                    if (Math.abs(r2OffsetX + approachTarget) <= 1e-3)
-                        startImpact();
+                    if (attackerIsP1) {
+                        anim1Run.update(dt);
+                        r1OffsetX = clamp(r1OffsetX + RUN_SPEED * dt, 0, approachTarget);
+                        
+                        // Toca som de especial quando a animação começa (a 10% do caminho)
+                        if (isSpecial && !specialSoundPlayed && 
+                            r1OffsetX >= approachTarget * 0.1) {
+                            audio.playSfx(AudioManager.SfxType.SPECIAL_ESPADAS, 1.5); // 1.5x velocidade
+                            specialSoundPlayed = true;
+                        }
+                        
+                        if (r1OffsetX >= approachTarget - 1e-3)
+                            startImpact();
+                    } else {
+                        anim2Run.update(dt);
+                        r2OffsetX = clamp(r2OffsetX - RUN_SPEED * dt, -approachTarget, 0);
+                        
+                        // Toca som de especial quando a animação começa (a 10% do caminho)
+                        if (isSpecial && !specialSoundPlayed && 
+                            Math.abs(r2OffsetX + approachTarget) <= approachTarget * 0.9) {
+                            audio.playSfx(AudioManager.SfxType.SPECIAL_ESPADAS, 1.5); // 1.5x velocidade
+                            specialSoundPlayed = true;
+                        }
+                        
+                        if (Math.abs(r2OffsetX + approachTarget) <= 1e-3)
+                            startImpact();
+                    }
                 }
                 return;
             }
@@ -694,7 +933,16 @@ public class PixelBattleView {
     /** Executa o golpe no IMPACT, decide DEFEND/HURT e liga a anim de ataque. */
     private void startImpact() {
         Action resolvedAction = pendingAction;
-        var result = engine.perform(resolvedAction); // aplica dano, troca turno, etc.
+        
+        // Cria comando com multiplicador da timing bar se for especial
+        BattleCommand command;
+        if (resolvedAction == Action.SPECIAL && timingBarHit) {
+            command = BattleCommand.of(resolvedAction, specialMultiplier);
+        } else {
+            command = BattleCommand.of(resolvedAction);
+        }
+        
+        var result = engine.perform(command); // aplica dano, troca turno, etc.
 
         // Toca sons apropriados
         if (resolvedAction == Action.SPECIAL) {
@@ -787,6 +1035,138 @@ public class PixelBattleView {
         r1OffsetX = 0;
         r2OffsetX = 0;
         specialSoundPlayed = false; // Reset flag para próxima vez
+        currentSkillCheck = null; // Reset skill check
+        timingBarActive = false;
+        timingBarHit = false;
+        timingBarAttempted = false;
+        rapidTapsActive = false;
+        rapidTapsCount = 0;
+        rapidTapsAttempted = false;
+        skillCheckFeedback = "";
+        skillCheckTimeout = 0.0;
+    }
+    
+    /**
+     * Atualiza a posição do indicador da timing bar.
+     */
+    private void updateTimingBar(double dt) {
+        // Continua movendo o indicador mesmo após tentativa (para feedback visual)
+        // Move o indicador
+        double moveAmount = timingBarSpeed * dt;
+        if (timingBarDirection) {
+            timingBarPosition += moveAmount;
+            if (timingBarPosition >= 1.0) {
+                timingBarPosition = 1.0;
+                timingBarDirection = false; // Inverte direção
+            }
+        } else {
+            timingBarPosition -= moveAmount;
+            if (timingBarPosition <= 0.0) {
+                timingBarPosition = 0.0;
+                timingBarDirection = true; // Inverte direção
+            }
+        }
+        
+        // Atualiza timer do feedback
+        if (skillCheckFeedbackTimer > 0) {
+            skillCheckFeedbackTimer -= dt;
+            if (skillCheckFeedbackTimer <= 0) {
+                skillCheckFeedback = "";
+            }
+        }
+    }
+    
+    /**
+     * Calcula o multiplicador baseado na posição do indicador quando o jogador acerta.
+     */
+    private void hitTimingBar() {
+        System.out.println("[DEBUG] hitTimingBar() chamado! timingBarAttempted: " + timingBarAttempted);
+        
+        if (timingBarAttempted) {
+            System.out.println("[DEBUG] Já tentou, ignorando...");
+            return; // Já tentou
+        }
+            
+        System.out.println("[DEBUG] Processando tentativa na timing bar...");
+        timingBarAttempted = true;
+        timingBarHit = true;
+        
+        // Zonas:
+        // Perfeita: 0.425 a 0.575 (centro ±15%)
+        // Boa: 0.35 a 0.65 (centro ±30%)
+        // Ruim: resto
+        
+        double centerDistance = Math.abs(timingBarPosition - 0.5);
+        
+        if (centerDistance <= 0.075) { // Zona perfeita (±15%)
+            specialMultiplier = 2.0;
+            skillCheckFeedback = "PERFEITO!";
+            skillCheckFeedbackTimer = 1.5;
+        } else if (centerDistance <= 0.15) { // Zona boa (±30%)
+            specialMultiplier = 1.5;
+            skillCheckFeedback = "BOM!";
+            skillCheckFeedbackTimer = 1.5;
+        } else { // Zona ruim
+            specialMultiplier = 1.0;
+            skillCheckFeedback = "FALHOU!";
+            skillCheckFeedbackTimer = 1.5;
+        }
+        
+        // NÃO toca som aqui - o som será tocado quando a animação começar
+    }
+    
+    /**
+     * Incrementa o contador de taps quando o jogador pressiona ESPAÇO durante Rapid Taps.
+     */
+    private void hitRapidTaps() {
+        if (rapidTapsAttempted)
+            return; // Já finalizou
+            
+        // Incrementa contador a cada tap
+        rapidTapsCount++;
+        System.out.println("[DEBUG] Rapid Taps: " + rapidTapsCount + " taps");
+    }
+    
+    /**
+     * Atualiza o Rapid Taps e calcula multiplicador quando o tempo acaba.
+     */
+    private void updateRapidTaps(double dt) {
+        if (rapidTapsAttempted)
+            return; // Já finalizou
+            
+        rapidTapsTimer += dt;
+        
+        // Atualiza timer do feedback
+        if (skillCheckFeedbackTimer > 0) {
+            skillCheckFeedbackTimer -= dt;
+            if (skillCheckFeedbackTimer <= 0) {
+                skillCheckFeedback = "";
+            }
+        }
+        
+        // Se o tempo acabou, calcula multiplicador baseado nos taps
+        if (rapidTapsTimer >= RAPID_TAPS_DURATION) {
+            rapidTapsAttempted = true;
+            
+            // Calcula multiplicador baseado na quantidade de taps
+            if (rapidTapsCount >= 15) {
+                specialMultiplier = 2.0;
+                skillCheckFeedback = "PERFEITO!";
+            } else if (rapidTapsCount >= 10) {
+                specialMultiplier = 1.5;
+                skillCheckFeedback = "BOM!";
+            } else if (rapidTapsCount >= 5) {
+                specialMultiplier = 1.2;
+                skillCheckFeedback = "OK!";
+            } else {
+                specialMultiplier = 1.0;
+                skillCheckFeedback = "FALHOU!";
+            }
+            
+            skillCheckFeedbackTimer = 1.5;
+            
+            // NÃO toca som aqui - o som será tocado quando a animação começar
+        }
     }
 
     private void render() {
@@ -857,12 +1237,179 @@ public class PixelBattleView {
         drawHpBarsHD();
         drawSpecialChargeBars();
 
+        // Desenha skill check se ativo
+        if (currentSkillCheck == SkillCheckType.TIMING_BAR && timingBarActive) {
+            drawTimingBar();
+        } else if (currentSkillCheck == SkillCheckType.RAPID_TAPS && rapidTapsActive) {
+            drawRapidTaps();
+        }
+
         // Desenha efeitos visuais (textos flutuantes)
         drawFloatingTexts();
 
         if (snap.finished) {
             String nome = (snap.winner == null || snap.winner.isBlank()) ? "VENCEDOR" : snap.winner;
             drawVictoryImageOverlay(gc, nome.toUpperCase());
+        }
+    }
+    
+    /**
+     * Desenha a timing bar para o especial.
+     */
+    private void drawTimingBar() {
+        // Dimensões da barra
+        double barWidth = 500;
+        double barHeight = 40;
+        double barX = (BASE_W - barWidth) / 2;
+        double barY = BASE_H - 200; // Próximo ao bottom
+        
+        // Fundo da barra (escuro)
+        gc.setFill(Color.rgb(20, 20, 30, 0.9));
+        gc.fillRoundRect(barX - 5, barY - 5, barWidth + 10, barHeight + 10, 10, 10);
+        
+        // Borda
+        gc.setStroke(Color.web("#BB86FC"));
+        gc.setLineWidth(3);
+        gc.strokeRoundRect(barX - 5, barY - 5, barWidth + 10, barHeight + 10, 10, 10);
+        
+        // Zonas de cor
+        double centerX = barX + barWidth / 2;
+        double perfectZoneWidth = barWidth * 0.15; // 15% de cada lado do centro
+        double goodZoneWidth = barWidth * 0.30; // 30% de cada lado do centro
+        
+        // Zona ruim (vermelha nas bordas)
+        gc.setFill(Color.rgb(100, 30, 30, 0.6));
+        gc.fillRect(barX, barY, (barWidth - goodZoneWidth * 2) / 2, barHeight);
+        gc.fillRect(centerX + goodZoneWidth, barY, (barWidth - goodZoneWidth * 2) / 2, barHeight);
+        
+        // Zona boa (amarela)
+        gc.setFill(Color.rgb(200, 150, 0, 0.6));
+        gc.fillRect(centerX - goodZoneWidth, barY, goodZoneWidth * 2, barHeight);
+        
+        // Zona perfeita (verde no centro)
+        gc.setFill(Color.rgb(0, 200, 100, 0.8));
+        gc.fillRect(centerX - perfectZoneWidth, barY, perfectZoneWidth * 2, barHeight);
+        
+        // Indicador (marcador que se move)
+        double indicatorX = barX + (timingBarPosition * barWidth);
+        gc.setFill(Color.web("#FFFFFF"));
+        gc.fillRect(indicatorX - 3, barY - 5, 6, barHeight + 10);
+        
+        // Sombra do indicador
+        DropShadow indicatorGlow = new DropShadow(10, Color.web("#BB86FC"));
+        gc.setEffect(indicatorGlow);
+        gc.fillRect(indicatorX - 3, barY - 5, 6, barHeight + 10);
+        gc.setEffect(null);
+        
+        // Texto de instrução
+        gc.setFill(Color.web("#EDE9FE"));
+        gc.setFont(Font.font("Arial", 18));
+        if (!timingBarAttempted) {
+            gc.fillText("Pressione ESPAÇO no momento certo!", barX, barY - 20);
+        } else {
+            // Mostra tempo restante se ainda não tentou
+            double timeLeft = SKILL_CHECK_MAX_TIME - skillCheckTimeout;
+            if (timeLeft > 0 && !timingBarHit) {
+                gc.fillText(String.format("Tempo restante: %.1fs", timeLeft), barX, barY - 20);
+            }
+        }
+        
+        // Feedback (PERFEITO!, BOM!, FALHOU!)
+        if (!skillCheckFeedback.isEmpty() && skillCheckFeedbackTimer > 0) {
+            Color feedbackColor = switch (skillCheckFeedback) {
+                case "PERFEITO!" -> Color.web("#00FF88");
+                case "BOM!" -> Color.web("#FFD700");
+                default -> Color.web("#FF4444");
+            };
+            
+            gc.setFill(feedbackColor);
+            gc.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+            
+            // Sombra no texto
+            DropShadow textGlow = new DropShadow(15, feedbackColor);
+            gc.setEffect(textGlow);
+            
+            double textWidth = gc.getFont().getSize() * skillCheckFeedback.length() * 0.6;
+            gc.fillText(skillCheckFeedback, (BASE_W - textWidth) / 2, barY + barHeight + 50);
+            
+            gc.setEffect(null);
+        }
+    }
+    
+    /**
+     * Desenha a interface do Rapid Taps.
+     */
+    private void drawRapidTaps() {
+        // Dimensões da área
+        double areaWidth = 500;
+        double areaHeight = 150;
+        double areaX = (BASE_W - areaWidth) / 2;
+        double areaY = BASE_H - 250;
+        
+        // Fundo
+        gc.setFill(Color.rgb(20, 20, 30, 0.9));
+        gc.fillRoundRect(areaX - 5, areaY - 5, areaWidth + 10, areaHeight + 10, 10, 10);
+        
+        // Borda
+        gc.setStroke(Color.web("#BB86FC"));
+        gc.setLineWidth(3);
+        gc.strokeRoundRect(areaX - 5, areaY - 5, areaWidth + 10, areaHeight + 10, 10, 10);
+        
+        // Texto de instrução
+        gc.setFill(Color.web("#EDE9FE"));
+        gc.setFont(Font.font("Arial", 20));
+        gc.fillText("Aperte ESPAÇO o máximo de vezes em 2 segundos!", areaX, areaY + 25);
+        
+        // Contador de taps
+        gc.setFill(Color.web("#BB86FC"));
+        gc.setFont(Font.font("Arial", FontWeight.BOLD, 36));
+        String tapsText = rapidTapsCount + " TAPS";
+        double tapsTextWidth = gc.getFont().getSize() * tapsText.length() * 0.5;
+        gc.fillText(tapsText, (BASE_W - tapsTextWidth) / 2, areaY + 70);
+        
+        // Barra de progresso do tempo
+        double progressBarWidth = areaWidth - 20;
+        double progressBarHeight = 20;
+        double progressBarX = areaX + 10;
+        double progressBarY = areaY + 90;
+        
+        // Fundo da barra
+        gc.setFill(Color.rgb(50, 50, 50, 0.8));
+        gc.fillRoundRect(progressBarX, progressBarY, progressBarWidth, progressBarHeight, 5, 5);
+        
+        // Progresso
+        double progress = Math.min(1.0, rapidTapsTimer / RAPID_TAPS_DURATION);
+        gc.setFill(Color.web("#BB86FC"));
+        gc.fillRoundRect(progressBarX, progressBarY, progressBarWidth * progress, progressBarHeight, 5, 5);
+        
+        // Tempo restante
+        double timeLeft = RAPID_TAPS_DURATION - rapidTapsTimer;
+        if (timeLeft > 0 && !rapidTapsAttempted) {
+            gc.setFill(Color.web("#EDE9FE"));
+            gc.setFont(Font.font("Arial", 14));
+            gc.fillText(String.format("%.1fs", timeLeft), progressBarX + progressBarWidth / 2 - 20, progressBarY + 15);
+        }
+        
+        // Feedback (PERFEITO!, BOM!, FALHOU!)
+        if (!skillCheckFeedback.isEmpty() && skillCheckFeedbackTimer > 0) {
+            Color feedbackColor = switch (skillCheckFeedback) {
+                case "PERFEITO!" -> Color.web("#00FF88");
+                case "BOM!" -> Color.web("#FFD700");
+                case "OK!" -> Color.web("#FFAA00");
+                default -> Color.web("#FF4444");
+            };
+            
+            gc.setFill(feedbackColor);
+            gc.setFont(Font.font("Arial", FontWeight.BOLD, 32));
+            
+            // Sombra no texto
+            DropShadow textGlow = new DropShadow(15, feedbackColor);
+            gc.setEffect(textGlow);
+            
+            double textWidth = gc.getFont().getSize() * skillCheckFeedback.length() * 0.6;
+            gc.fillText(skillCheckFeedback, (BASE_W - textWidth) / 2, areaY + areaHeight + 50);
+            
+            gc.setEffect(null);
         }
     }
 
@@ -1051,6 +1598,15 @@ public class PixelBattleView {
         beforeSnap = before;
         attackerIsP1 = before.currentName.equals(leftName);
         specialSoundPlayed = false; // Reset flag quando inicia nova fase de aproximação
+        currentSkillCheck = null; // Reset skill check
+        timingBarActive = false;
+        timingBarHit = false;
+        timingBarAttempted = false;
+        rapidTapsActive = false;
+        rapidTapsCount = 0;
+        rapidTapsAttempted = false;
+        specialMultiplier = 1.5; // Reset para padrão
+        skillCheckTimeout = 0.0;
 
         approachTarget = Math.max(0, 2.0 * GAP - HIT_OVERLAP);
 

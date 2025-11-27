@@ -260,7 +260,14 @@ public class UiBattleEngine {
             case ATTACK, SPECIAL -> {
                 boolean useSpecial = (action == Action.SPECIAL) && current.robot().consumeSpecial();
                 boolean wasGuarding = enemy.robot().isGuarding();
-                DamageResult res = calc.compute(current.robot(), enemy.robot(), useSpecial);
+                
+                // Pega multiplicador customizado se for especial (da timing bar)
+                double specialMultiplier = 1.5; // padrão
+                if (useSpecial && command.specialMultiplier() != null) {
+                    specialMultiplier = command.specialMultiplier();
+                }
+                
+                DamageResult res = calc.compute(current.robot(), enemy.robot(), useSpecial, specialMultiplier);
 
                 if (res.evaded) {
                     logs.add(String.format("%s atacou, mas %s ESQUIVOU! (0 dano)", current.name(), enemy.name()));
