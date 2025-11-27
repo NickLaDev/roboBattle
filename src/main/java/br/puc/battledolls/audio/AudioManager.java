@@ -162,6 +162,20 @@ public final class AudioManager {
     public void playSfx(SfxType type) {
         AudioClip clip = sfxClips.get(type);
         if (clip != null) {
+            clip.setRate(1.0); // Reset rate to normal
+            clip.play(sfxVolume);
+        }
+    }
+    
+    /**
+     * Toca um efeito sonoro com velocidade ajustada.
+     * @param type Tipo do efeito sonoro
+     * @param rate Velocidade de reprodução (1.0 = normal, 1.5 = 1.5x mais rápido)
+     */
+    public void playSfx(SfxType type, double rate) {
+        AudioClip clip = sfxClips.get(type);
+        if (clip != null) {
+            clip.setRate(rate);
             clip.play(sfxVolume);
         }
     }

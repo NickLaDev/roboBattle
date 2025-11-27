@@ -118,6 +118,7 @@ public class PixelBattleView {
     private Action pendingAction = null; // ATTACK ou SPECIAL
     private UiBattleEngine.Snapshot beforeSnap; // snapshot antes do impacto
     private double approachTarget = 0;
+    private boolean specialSoundPlayed = false; // Controla se o som de especial já foi tocado nesta fase
     private double attackTimer = 0;
 
     // Timeout de segurança para desbloquear input se algo der errado
@@ -566,11 +567,27 @@ public class PixelBattleView {
                 if (attackerIsP1) {
                     anim1Run.update(dt);
                     r1OffsetX = clamp(r1OffsetX + RUN_SPEED * dt, 0, approachTarget);
+                    
+                    // Toca som de especial um pouco antes do impacto (a 70% do caminho)
+                    if (pendingAction == Action.SPECIAL && !specialSoundPlayed && 
+                        r1OffsetX >= approachTarget * 0.7) {
+                        audio.playSfx(AudioManager.SfxType.SPECIAL_ESPADAS, 1.5); // 1.5x velocidade
+                        specialSoundPlayed = true;
+                    }
+                    
                     if (r1OffsetX >= approachTarget - 1e-3)
                         startImpact();
                 } else {
                     anim2Run.update(dt);
                     r2OffsetX = clamp(r2OffsetX - RUN_SPEED * dt, -approachTarget, 0);
+                    
+                    // Toca som de especial um pouco antes do impacto (a 70% do caminho)
+                    if (pendingAction == Action.SPECIAL && !specialSoundPlayed && 
+                        Math.abs(r2OffsetX + approachTarget) <= approachTarget * 0.3) {
+                        audio.playSfx(AudioManager.SfxType.SPECIAL_ESPADAS, 1.5); // 1.5x velocidade
+                        specialSoundPlayed = true;
+                    }
+                    
                     if (Math.abs(r2OffsetX + approachTarget) <= 1e-3)
                         startImpact();
                 }
@@ -681,8 +698,8 @@ public class PixelBattleView {
 
         // Toca sons apropriados
         if (resolvedAction == Action.SPECIAL) {
-            // Toca som da habilidade especial
-            audio.playSfx(AudioManager.SfxType.SPECIAL_ESPADAS);
+            // Som de especial já foi tocado antes (durante APPROACH)
+            // Não precisa tocar novamente aqui
         } else if (resolvedAction == Action.ATTACK) {
             // Toca variação aleatória de ataque
             audio.playRandomAttack();
@@ -733,6 +750,8 @@ public class PixelBattleView {
                 p2HurtPlaying = false;
                 tDef2 = 0;
                 anim2Defend.reset();
+                // Toca som de defesa quando o ataque é defendido
+                audio.playRandomDefend();
             } else if (tookDamage) {
                 p2HurtPlaying = true;
                 p2DefendPlaying = false;
@@ -745,6 +764,8 @@ public class PixelBattleView {
                 p1HurtPlaying = false;
                 tDef1 = 0;
                 anim1Defend.reset();
+                // Toca som de defesa quando o ataque é defendido
+                audio.playRandomDefend();
             } else if (tookDamage) {
                 p1HurtPlaying = true;
                 p1DefendPlaying = false;
@@ -765,6 +786,7 @@ public class PixelBattleView {
         beforeSnap = null;
         r1OffsetX = 0;
         r2OffsetX = 0;
+        specialSoundPlayed = false; // Reset flag para próxima vez
     }
 
     private void render() {
@@ -989,8 +1011,7 @@ public class PixelBattleView {
 
         if (a == Action.DEFEND) {
             System.out.println("[DEBUG] Executando DEFEND");
-            // Toca variação aleatória de defesa
-            audio.playRandomDefend();
+            // NÃO toca som aqui - o som será tocado quando o ataque for defendido
             var result = engine.perform(command);
             // Cria efeito visual para defesa se necessário
             if (result.event != null && result.event.isDefended) {
@@ -1029,6 +1050,7 @@ public class PixelBattleView {
         pendingAction = a;
         beforeSnap = before;
         attackerIsP1 = before.currentName.equals(leftName);
+        specialSoundPlayed = false; // Reset flag quando inicia nova fase de aproximação
 
         approachTarget = Math.max(0, 2.0 * GAP - HIT_OVERLAP);
 

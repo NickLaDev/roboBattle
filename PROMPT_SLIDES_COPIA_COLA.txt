@@ -1,0 +1,30 @@
+Crie uma apresentação de slides profissional sobre o jogo Battle Dolls. Use o seguinte conteúdo estruturado:
+
+SLIDE 1 - TÍTULO: "Battle Dolls - Arena de Personagens em Pixel Art" (Projeto de Jogo em Java/JavaFX)
+
+SLIDE 2 - CONCEITO: Jogo de duelo 1×1 em pixel art estilo arena. Cada jogador escolhe um personagem base com habilidades únicas, customiza com armas/armaduras/poções (níveis 1-5), e combate estrategicamente por turnos. Dois modos: PvP (Player vs Player) e PvC (Player vs CPU/Campanha). Objetivo: reduzir HP do oponente a zero.
+
+SLIDE 3 - PERSONAGENS: 3 classes jogáveis - Beatriz (espadachim solar, golpes críticos, habilidade: Golpe Solar com 70% dano extra), Yuri (guardião defensivo, alta DEF/HP, habilidade: Escudo Prismático que cura 35 HP + defesa), Shinobi (assassino ágil, esquivas, habilidade: Lâminas Envenenadas com sangramento garantido). Cada um tem atributos base únicos (ATK, DEF, HP, CRIT%, EVA%).
+
+SLIDE 4 - EQUIPAMENTOS: Sistema de customização com Armas (níveis 1-5, aumentam ATK e crítico) e Armaduras (níveis 1-5, aumentam DEF e HP). Sistema de créditos (início: 1000 créditos). Loja visual para seleção antes da batalha. Custo aumenta exponencialmente com nível, exigindo decisões estratégicas.
+
+SLIDE 5 - POÇÕES: 4 tipos de poções consumíveis, cada uma com 5 níveis. Poção de Vida (restaura 35-95 HP), Poção de Barreira (escudo 25-65), Poção de Energia (recupera carga especial 35-95), Poção de Fúria (aumenta ataque 15-75% por 3-7 turnos). Compradas em loja separada, usadas durante batalha via inventário lateral, consomem turno. CPU também usa estrategicamente.
+
+SLIDE 6 - COMBATE: Sistema por turnos com 3 ações: ATTACK (dano ATK vs DEF), DEFEND (reduz próximo dano pela metade + gera carga especial), SPECIAL (habilidade única, requer 100% carga). Mecânicas: Crítico (chance CRIT%, multiplicador 1.5x), Esquiva (chance EVA%, evita dano), Sangramento (de críticos, dano por turno), Escudo/Barreira (absorve dano), Fúria (multiplicador temporário).
+
+SLIDE 7 - CAMPANHA PvC: 4 fases progressivas com bosses únicos (Converted Vampire, Vampire Girl, Samurai Commander, Countess Vampire). Recompensas de 200-500 créditos por vitória. Entre fases: upgrade de equipamentos e compra de poções. IA inteligente usa poções e estratégias baseadas em situação (HP baixo, especial disponível, etc.). Progressão: Vitória → Créditos → Upgrade → Poções → Próxima Fase.
+
+SLIDE 8 - VISUAIS E ÁUDIO: Pixel art animado com spritesheets completas (Idle, Attack 1-3, Run, Defend, Hurt, Death). Efeitos visuais para eventos (crítico, esquiva, defesa, sangramento, poções). Textos flutuantes informativos. Sistema de áudio: música temática para menu e batalhas, músicas únicas por boss, efeitos sonoros para ações, controle de volume separado.
+
+SLIDE 9 - IMPLEMENTADO: ✅ Sistema completo de personagens e classes, ✅ Modo PvP funcional, ✅ Modo PvC com campanha de 4 fases, ✅ Loja de equipamentos, ✅ Loja de poções, ✅ Inventário durante batalha, ✅ IA estratégica para CPU, ✅ Sistema de créditos e recompensas, ✅ Animações e efeitos visuais, ✅ Sistema de áudio completo, ✅ Interface gráfica completa, ✅ Cálculo de dano com todas mecânicas.
+
+SLIDE 10 - FUTURO: 🔄 Mais personagens (3→5-6), 🔄 Mais fases (4→8-10), 🔄 Save/load, 🔄 Ranking/estatísticas, 🔄 Dificuldades (Fácil/Normal/Difícil), 🔄 Mais tipos de poções, 🔄 Sistema de conquistas, 🔄 Melhorias na IA, 🔄 Polimento visual, 🔄 Balanceamento fino.
+
+SLIDE 11 - TECNOLOGIAS: Java 17+, JavaFX (interface gráfica), Gradle (build), Pixel Art (assets customizados), Arquitetura Modular (Modelo/Combate/UI separados). Estrutura: Modelo (Personagens, Equipamentos, Poções), Combate (Engine, Calculadora de dano, IA), UI (Telas, Animações, Efeitos), Áudio (Gerenciador de música/SFX).
+
+SLIDE 12 - CONCLUSÃO: Battle Dolls é um jogo completo e funcional demonstrando desenvolvimento de jogos 2D em Java/JavaFX, combate estratégico por turnos, IA para CPU, progressão e customização, interface gráfica polida. Status: Jogável e completo nos modos PvP e PvC, pronto para expansões.
+
+INSTRUÇÕES DE DESIGN: Use cores de pixel art (tons escuros com acentos vibrantes como roxo #BB86FC, dourado #FFD700). Mantenha slides visuais, concisos, com ícones quando apropriado. Use ✅ para completo e 🔄 para futuro.
+
+
+
