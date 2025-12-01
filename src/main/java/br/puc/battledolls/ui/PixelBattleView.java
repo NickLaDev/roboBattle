@@ -4,6 +4,7 @@ import br.puc.battledolls.ai.AIController;
 import br.puc.battledolls.audio.AudioManager;
 import br.puc.battledolls.combat.Action;
 import br.puc.battledolls.combat.BattleCommand;
+import br.puc.battledolls.model.AbilityEffect;
 import javafx.animation.AnimationTimer;
 import javafx.animation.PauseTransition;
 import javafx.util.Duration;
@@ -934,13 +935,10 @@ public class PixelBattleView {
     private void startImpact() {
         Action resolvedAction = pendingAction;
         
-        // Cria comando com multiplicador da timing bar se for especial
-        BattleCommand command;
-        if (resolvedAction == Action.SPECIAL && timingBarHit) {
-            command = BattleCommand.of(resolvedAction, specialMultiplier);
-        } else {
-            command = BattleCommand.of(resolvedAction);
-        }
+        // Cria comando com o multiplicador do skill check (Timing Bar, Rapid Taps ou CPU)
+        BattleCommand command = (resolvedAction == Action.SPECIAL)
+                ? BattleCommand.of(resolvedAction, specialMultiplier)
+                : BattleCommand.of(resolvedAction);
         
         var result = engine.perform(command); // aplica dano, troca turno, etc.
 
@@ -1131,18 +1129,18 @@ public class PixelBattleView {
      * Atualiza o Rapid Taps e calcula multiplicador quando o tempo acaba.
      */
     private void updateRapidTaps(double dt) {
-        if (rapidTapsAttempted)
-            return; // Já finalizou
-            
-        rapidTapsTimer += dt;
-        
-        // Atualiza timer do feedback
+        // Atualiza timer do feedback mesmo após finalizar para destravar a animação
         if (skillCheckFeedbackTimer > 0) {
             skillCheckFeedbackTimer -= dt;
             if (skillCheckFeedbackTimer <= 0) {
                 skillCheckFeedback = "";
             }
         }
+
+        if (rapidTapsAttempted)
+            return; // Já finalizou
+            
+        rapidTapsTimer += dt;
         
         // Se o tempo acabou, calcula multiplicador baseado nos taps
         if (rapidTapsTimer >= RAPID_TAPS_DURATION) {
@@ -1591,6 +1589,34 @@ public class PixelBattleView {
             return;
         }
 
+        // Especial puramente defensivo (ex.: Yuri) não precisa de corrida/animação
+        if (a == Action.SPECIAL) {
+            AbilityEffect ability = getCurrentAbility();
+            if (ability != null && !ability.offensive()) {
+                System.out.println("[DEBUG] Especial defensivo detectado - executando sem animação/skill check");
+                var result = engine.perform(command);
+                if (result.event != null) {
+                    createVisualEffects(result.event);
+                }
+                // Reseta estados de skill check/locks
+                inputLocked = false;
+                phase = Phase.NONE;
+                pendingAction = null;
+                currentSkillCheck = null;
+                timingBarActive = false;
+                timingBarHit = false;
+                timingBarAttempted = false;
+                rapidTapsActive = false;
+                rapidTapsCount = 0;
+                rapidTapsAttempted = false;
+                skillCheckFeedback = "";
+                skillCheckFeedbackTimer = 0.0;
+                skillCheckTimeout = 0.0;
+                specialMultiplier = 1.5;
+                return;
+            }
+        }
+
         // ATTACK/SPECIAL: começa IMEDIATAMENTE a corrida
         inputLocked = true;
         phase = Phase.APPROACH;
@@ -1644,6 +1670,16 @@ public class PixelBattleView {
 
     private static double clamp(double v, double lo, double hi) {
         return Math.max(lo, Math.min(hi, v));
+    }
+    
+    /** Retorna a habilidade especial do jogador atual (ou null se indisponível). */
+    private AbilityEffect getCurrentAbility() {
+        var currentPlayer = engine.getCurrentPlayer();
+        if (currentPlayer == null || currentPlayer.robot() == null) {
+            return null;
+        }
+        var cc = currentPlayer.robot().characterClass();
+        return (cc == null) ? null : cc.ability();
     }
 
     // ================== VITÓRIA: IMAGEM COM TRANSIÇÃO ==================
@@ -1764,7 +1800,8 @@ public class PixelBattleView {
         // Carrega sprites baseado na estrutura
         if (useFolderStructure) {
             // Estrutura de pasta (ex: Shinobi/Idle.png)
-            r1Idle = safeLoadSpriteSheet(basePath + "/Idle.png", 8, 1);
+            final int shinobiFrame = 128;
+            r1Idle = safeLoadSpriteSheet(basePath + "/Idle.png", 6, 1, shinobiFrame, shinobiFrame);
             if (r1Idle == null)
                 r1Idle = new SpriteSheet("/assets/characters/r1_idle.png", 6, 1);
             anim1Idle = new SpriteAnimator(r1Idle.columns(), idleFps1);
@@ -1772,32 +1809,38 @@ public class PixelBattleView {
             r1Atks = new SpriteSheet[3];
             a1Atks = new SpriteAnimator[3];
             for (int i = 0; i < 3; i++) {
-                r1Atks[i] = safeLoadSpriteSheet(basePath + "/Attack_" + (i + 1) + ".png", 4, 1);
+                int cols = switch (i) {
+                    case 0 -> 5; // 640px / 128
+                    case 1 -> 3; // 384px / 128
+                    default -> 4; // 512px / 128
+                };
+                r1Atks[i] = safeLoadSpriteSheet(basePath + "/Attack_" + (i + 1) + ".png",
+                        cols, 1, shinobiFrame, shinobiFrame);
                 if (r1Atks[i] == null)
                     r1Atks[i] = new SpriteSheet("/assets/characters/r1_attack" + (i + 1) + ".png", 4, 1);
                 a1Atks[i] = new SpriteAnimator(r1Atks[i].columns(), atkFps1[i]);
             }
 
-            r1Run = safeLoadSpriteSheet(basePath + "/Run.png", 8, 1);
+            r1Run = safeLoadSpriteSheet(basePath + "/Run.png", 8, 1, shinobiFrame, shinobiFrame);
             if (r1Run == null)
                 r1Run = new SpriteSheet("/assets/characters/r1_run.png", 8, 1);
             anim1Run = new SpriteAnimator(r1Run.columns(), runFps1);
 
             // Shield.png para defend
-            r1Defend = safeLoadSpriteSheet(basePath + "/Shield.png", 2, 1);
+            r1Defend = safeLoadSpriteSheet(basePath + "/Shield.png", 4, 1, shinobiFrame, shinobiFrame);
             if (r1Defend == null)
                 r1Defend = new SpriteSheet("/assets/characters/r1_defend.png", 2, 1);
             anim1Defend = new SpriteAnimator(r1Defend.columns(), defendFps1);
             durDef1 = r1Defend.columns() / defendFps1;
 
-            r1Hurt = safeLoadSpriteSheet(basePath + "/Hurt.png", 3, 1);
+            r1Hurt = safeLoadSpriteSheet(basePath + "/Hurt.png", 2, 1, shinobiFrame, shinobiFrame);
             if (r1Hurt == null)
                 r1Hurt = new SpriteSheet("/assets/characters/r1_hurt.png", 3, 1);
             anim1Hurt = new SpriteAnimator(r1Hurt.columns(), hurtFps1);
             durHurt1 = r1Hurt.columns() / hurtFps1;
 
             // Dead.png para death
-            r1Death = safeLoadSpriteSheet(basePath + "/Dead.png", 3, 1);
+            r1Death = safeLoadSpriteSheet(basePath + "/Dead.png", 4, 1, shinobiFrame, shinobiFrame);
             if (r1Death == null)
                 r1Death = new SpriteSheet("/assets/characters/r1_death.png", 3, 1);
             anim1Death = new SpriteAnimator(r1Death.columns(), deathFps1);
@@ -1999,7 +2042,10 @@ public class PixelBattleView {
 
                 // 5. SANGRAMENTO se aplicável
                 if (event.isBleeding) {
-                    floatingTexts.add(new FloatingText("SANGRAMENTO", defenderX, defenderY + 90,
+                    String status = (event.statusLabel != null && !event.statusLabel.isBlank())
+                            ? event.statusLabel
+                            : "SANGRAMENTO";
+                    floatingTexts.add(new FloatingText(status, defenderX, defenderY + 90,
                             Color.web("#FF0044"), false));
                 }
 
@@ -2025,7 +2071,10 @@ public class PixelBattleView {
 
                 // 4. SANGRAMENTO se aplicável
                 if (event.isBleeding) {
-                    floatingTexts.add(new FloatingText("SANGRAMENTO", defenderX, defenderY + 80,
+                    String status = (event.statusLabel != null && !event.statusLabel.isBlank())
+                            ? event.statusLabel
+                            : "SANGRAMENTO";
+                    floatingTexts.add(new FloatingText(status, defenderX, defenderY + 80,
                             Color.web("#FF0044"), false));
                 }
             }

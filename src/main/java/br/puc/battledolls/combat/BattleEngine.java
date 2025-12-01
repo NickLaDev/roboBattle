@@ -2,6 +2,7 @@ package br.puc.battledolls.combat;
 
 import br.puc.battledolls.model.Player;
 import br.puc.battledolls.model.Robot;
+import br.puc.battledolls.model.AbilityEffect;
 
 import java.util.Random;
 import java.util.Scanner;
@@ -42,13 +43,44 @@ public class BattleEngine {
                 }
                 case ATTACK, SPECIAL -> {
                     boolean useSpecial = (action == Action.SPECIAL) && current.robot().consumeSpecial();
-                    DamageResult res = calc.compute(current.robot(), enemy.robot(), useSpecial);
+                    AbilityEffect ability = (useSpecial && current.robot().characterClass() != null)
+                            ? current.robot().characterClass().ability()
+                            : null;
+
+                    // Habilidade defensiva (ex.: cura/guarda)
+                    if (useSpecial && ability != null && !ability.offensive()) {
+                        if (!ability.activationMessage().isBlank()) {
+                            System.out.println(ability.activationMessage());
+                        }
+                        if (ability.selfHeal() > 0) {
+                            current.robot().heal(ability.selfHeal());
+                            System.out.printf("%s recuperou %d de HP. HP agora = %d%n",
+                                    current.name(), ability.selfHeal(), current.robot().getHp());
+                        }
+                        if (ability.grantGuard()) {
+                            current.robot().setGuarding(true);
+                            System.out.printf("%s entrou em postura defensiva!%n", current.name());
+                        }
+                        break;
+                    }
+
+                    double baseSpecialMultiplier = useSpecial ? 1.5 : 1.0;
+                    double abilityMultiplier = (useSpecial && ability != null) ? ability.damageMultiplier() : 1.0;
+                    double totalMultiplier = useSpecial ? baseSpecialMultiplier * abilityMultiplier : 1.0;
+
+                    DamageResult res = calc.compute(current.robot(), enemy.robot(), useSpecial, totalMultiplier);
 
                     if (res.evaded) {
                         System.out.printf("%s atacou, mas %s ESQUIVOU! (0 dano)%n",
                                 current.name(), enemy.name());
                     } else {
                         int dmg = res.finalDamage;
+                        if (useSpecial && ability != null) {
+                            dmg += ability.flatDamageBonus();
+                        }
+                        boolean guaranteedPoison = useSpecial && ability != null
+                                && ability.guaranteedBleedTicks() != null
+                                && ability.guaranteedBleedDamage() != null;
 
                         // redução por guarda
                         if (enemy.robot().isGuarding()) {
@@ -65,10 +97,52 @@ public class BattleEngine {
                                 (useSpecial ? " (SPECIAL!)" : ""),
                                 enemy.name(), enemy.robot().getHp());
 
-                        if (res.applyBleed && enemy.robot().isAlive()) {
-                            enemy.robot().applyBleed(2, 3); // 2 turnos, 3 de dano por tick
-                            System.out.printf("(SANGRAMENTO) %s foi afligido e sofrerá dano por %d turnos.%n",
-                                    enemy.name(), 2);
+                        int bleedTicks = 0;
+                        int bleedDamage = 0;
+                        boolean appliedBleed = false;
+
+                        // Crítico padrão aplica 2x3 se algum dano passou
+                        if (res.applyBleed && dmg > 0) {
+                            bleedTicks = 2;
+                            bleedDamage = 3;
+                            appliedBleed = true;
+                        }
+                        // Habilidade especial pode garantir/estender sangramento mesmo sem crítico
+                        if (useSpecial && ability != null) {
+                            Integer guaranteedTicks = ability.guaranteedBleedTicks();
+                            Integer guaranteedDamage = ability.guaranteedBleedDamage();
+                            if (guaranteedTicks != null && guaranteedDamage != null) {
+                                bleedTicks = Math.max(bleedTicks, guaranteedTicks);
+                                bleedDamage = Math.max(bleedDamage, guaranteedDamage);
+                                appliedBleed = true;
+                            }
+                            if (appliedBleed && (ability.extraBleedTicks() > 0 || ability.extraBleedDamage() > 0)) {
+                                bleedTicks += ability.extraBleedTicks();
+                                bleedDamage += ability.extraBleedDamage();
+                            }
+                        }
+                        if (appliedBleed && enemy.robot().isAlive()) {
+                            enemy.robot().applyBleed(bleedTicks, bleedDamage);
+                            String status = (useSpecial && ability != null && ability.guaranteedBleedTicks() != null)
+                                    ? "ENVENENAMENTO"
+                                    : "SANGRAMENTO";
+                            System.out.printf("(%s) %s foi afligido e sofrerá dano por %d turnos.%n",
+                                    status, enemy.name(), bleedTicks);
+                        }
+
+                        if (useSpecial && ability != null) {
+                            if (ability.selfHeal() > 0) {
+                                current.robot().heal(ability.selfHeal());
+                                System.out.printf("%s se curou em %d HP. HP agora = %d%n",
+                                        current.name(), ability.selfHeal(), current.robot().getHp());
+                            }
+                            if (ability.grantGuard()) {
+                                current.robot().setGuarding(true);
+                                System.out.printf("%s entrou em postura defensiva!%n", current.name());
+                            }
+                            if (!ability.activationMessage().isBlank()) {
+                                System.out.println(ability.activationMessage());
+                            }
                         }
                     }
                 }

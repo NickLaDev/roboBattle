@@ -6,6 +6,7 @@ import br.puc.battledolls.combat.DamageCalculator;
 import br.puc.battledolls.combat.DamageResult;
 import br.puc.battledolls.items.Potion;
 import br.puc.battledolls.model.Player;
+import br.puc.battledolls.model.AbilityEffect;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -74,10 +75,11 @@ public class UiBattleEngine {
         public final int damage;
         public final String attackerName;
         public final String defenderName;
+        public final String statusLabel;
         
         public BattleEvent(boolean isCritical, boolean isEvaded, boolean isDefended, 
                           boolean isSpecial, boolean isBleeding, int damage,
-                          String attackerName, String defenderName) {
+                          String attackerName, String defenderName, String statusLabel) {
             this.isCritical = isCritical;
             this.isEvaded = isEvaded;
             this.isDefended = isDefended;
@@ -86,10 +88,11 @@ public class UiBattleEngine {
             this.damage = damage;
             this.attackerName = attackerName;
             this.defenderName = defenderName;
+            this.statusLabel = statusLabel;
         }
         
         public static BattleEvent none() {
-            return new BattleEvent(false, false, false, false, false, 0, "", "");
+            return new BattleEvent(false, false, false, false, false, 0, "", "", "");
         }
     }
 
@@ -223,7 +226,7 @@ public class UiBattleEngine {
                         logs.add(String.format("%s usou %s e recuperou %d HP! HP atual: %d",
                             current.name(), potion.getDisplayName(), heal, current.robot().getHp()));
                         event = new BattleEvent(false, false, false, false, false, -heal, 
-                            current.name(), current.name()); // negativo indica cura
+                            current.name(), current.name(), ""); // negativo indica cura
                     }
                     case BARRERA -> {
                         int shield = potion.getShieldAmount();
@@ -231,7 +234,7 @@ public class UiBattleEngine {
                         logs.add(String.format("%s usou %s e ganhou %d de escudo!",
                             current.name(), potion.getDisplayName(), shield));
                         event = new BattleEvent(false, false, false, false, false, -shield - 1000, 
-                            current.name(), current.name()); // -1000+ indica escudo
+                            current.name(), current.name(), ""); // -1000+ indica escudo
                     }
                     case ENERGIA -> {
                         int energy = potion.getEnergyAmount();
@@ -239,7 +242,7 @@ public class UiBattleEngine {
                         logs.add(String.format("%s usou %s e ganhou %d de carga especial! Carga: %d/100",
                             current.name(), potion.getDisplayName(), energy, current.robot().getSpecialCharge()));
                         event = new BattleEvent(false, false, false, false, false, -energy - 2000, 
-                            current.name(), current.name()); // -2000+ indica energia
+                            current.name(), current.name(), ""); // -2000+ indica energia
                     }
                     case FURIA -> {
                         double multiplier = potion.getFuryMultiplier();
@@ -248,7 +251,7 @@ public class UiBattleEngine {
                         logs.add(String.format("%s usou %s! Ataque aumentado em %.0f%% por %d turnos!",
                             current.name(), potion.getDisplayName(), (multiplier - 1.0) * 100, duration));
                         event = new BattleEvent(false, false, false, false, false, -3000, 
-                            current.name(), current.name()); // -3000 indica fúria
+                            current.name(), current.name(), ""); // -3000 indica fúria
                     }
                 }
             }
@@ -260,46 +263,132 @@ public class UiBattleEngine {
             case ATTACK, SPECIAL -> {
                 boolean useSpecial = (action == Action.SPECIAL) && current.robot().consumeSpecial();
                 boolean wasGuarding = enemy.robot().isGuarding();
+                AbilityEffect ability = (useSpecial && current.robot().characterClass() != null)
+                        ? current.robot().characterClass().ability()
+                        : null;
                 
-                // Pega multiplicador customizado se for especial (da timing bar)
-                double specialMultiplier = 1.5; // padrão
-                if (useSpecial && command.specialMultiplier() != null) {
-                    specialMultiplier = command.specialMultiplier();
-                }
-                
-                DamageResult res = calc.compute(current.robot(), enemy.robot(), useSpecial, specialMultiplier);
-
-                if (res.evaded) {
-                    logs.add(String.format("%s atacou, mas %s ESQUIVOU! (0 dano)", current.name(), enemy.name()));
-                    event = new BattleEvent(false, true, false, useSpecial, false, 0, current.name(), enemy.name());
-                } else {
-                    int dmg = res.finalDamage;
-                    boolean wasDefended = false;
-
-                    if (wasGuarding) {
-                        int original = dmg;
-                        dmg = Math.max(1, (int) Math.round(dmg * 0.5));
-                        enemy.robot().clearGuard();
-                        wasDefended = true;
-                        logs.add(String.format("(GUARDA) Dano reduzido de %d para %d.", original, dmg));
-                    }
-
-                    enemy.robot().takeDamage(dmg);
-                    logs.add(String.format("%s causou %d de dano%s%s. HP de %s = %d",
-                            current.name(), dmg,
-                            (res.critical ? " (CRIT!)" : ""),
-                            (useSpecial ? " (SPECIAL!)" : ""),
-                            enemy.name(), enemy.robot().getHp()));
-
-                    boolean appliedBleed = false;
-                    if (res.applyBleed && enemy.robot().isAlive()) {
-                        enemy.robot().applyBleed(2, 3);
-                        appliedBleed = true;
-                        logs.add(String.format("(SANGRAMENTO) %s foi afligido por 2 turnos.", enemy.name()));
+                if (useSpecial && ability != null && !ability.offensive()) {
+                    // Habilidade defensiva (sem ataque direto)
+                    if (!ability.activationMessage().isBlank()) {
+                        logs.add(ability.activationMessage());
+                    } else {
+                        logs.add(current.name() + " usou o especial " + ability.name() + "!");
                     }
                     
-                    event = new BattleEvent(res.critical, false, wasDefended, useSpecial, 
-                                          appliedBleed, dmg, current.name(), enemy.name());
+                    // Cura
+                    int heal = ability.selfHeal();
+                    if (heal > 0) {
+                        current.robot().heal(heal);
+                        logs.add(String.format("%s recuperou %d de HP. HP atual: %d",
+                                current.name(), heal, current.robot().getHp()));
+                        event = new BattleEvent(false, false, false, true, false, -heal,
+                                current.name(), current.name(), "");
+                    } else {
+                        event = new BattleEvent(false, false, false, true, false, 0,
+                                current.name(), current.name(), "");
+                    }
+                    
+                    // Ativa guarda se aplicável
+                    if (ability.grantGuard()) {
+                        current.robot().setGuarding(true);
+                        logs.add(current.name() + " entrou em postura defensiva!");
+                    }
+                } else {
+                
+                    // Pega multiplicador customizado se for especial (da timing bar) e ajusta pelo personagem
+                    double skillMultiplier = (useSpecial && command.specialMultiplier() != null)
+                            ? command.specialMultiplier()
+                            : (useSpecial ? 1.5 : 1.0);
+                    double abilityMultiplier = (useSpecial && ability != null) ? ability.damageMultiplier() : 1.0;
+                    double totalMultiplier = useSpecial ? skillMultiplier * abilityMultiplier : 1.0;
+                    
+                    DamageResult res = calc.compute(current.robot(), enemy.robot(), useSpecial, totalMultiplier);
+
+                    if (res.evaded) {
+                        logs.add(String.format("%s atacou, mas %s ESQUIVOU! (0 dano)", current.name(), enemy.name()));
+                        event = new BattleEvent(false, true, false, useSpecial, false, 0, current.name(), enemy.name(), "");
+                    } else {
+                        int dmg = res.finalDamage;
+                        if (useSpecial && ability != null) {
+                            dmg += ability.flatDamageBonus();
+                        }
+                        dmg = Math.max(1, dmg);
+                        boolean wasDefended = false;
+                        boolean guaranteedPoison = useSpecial && ability != null
+                                && ability.guaranteedBleedTicks() != null
+                                && ability.guaranteedBleedDamage() != null;
+
+                        if (wasGuarding) {
+                            int original = dmg;
+                            dmg = Math.max(1, (int) Math.round(dmg * 0.5));
+                            enemy.robot().clearGuard();
+                            wasDefended = true;
+                            logs.add(String.format("(GUARDA) Dano reduzido de %d para %d.", original, dmg));
+                        }
+
+                        enemy.robot().takeDamage(dmg);
+                        logs.add(String.format("%s causou %d de dano%s%s. HP de %s = %d",
+                                current.name(), dmg,
+                                (res.critical ? " (CRIT!)" : ""),
+                                (useSpecial ? " (SPECIAL!)" : ""),
+                                enemy.name(), enemy.robot().getHp()));
+
+                        int bleedTicks = 0;
+                        int bleedDamage = 0;
+                        boolean appliedBleed = false;
+
+                        // Crítico padrão aplica 2x3 se algum dano passou
+                        if (res.applyBleed && dmg > 0) {
+                            bleedTicks = 2;
+                            bleedDamage = 3;
+                            appliedBleed = true;
+                        }
+
+                        // Habilidade especial pode garantir/estender sangramento mesmo sem crítico
+                        if (useSpecial && ability != null) {
+                            Integer guaranteedTicks = ability.guaranteedBleedTicks();
+                            Integer guaranteedDamage = ability.guaranteedBleedDamage();
+                            if (guaranteedTicks != null && guaranteedDamage != null) {
+                                bleedTicks = Math.max(bleedTicks, guaranteedTicks);
+                                bleedDamage = Math.max(bleedDamage, guaranteedDamage);
+                                appliedBleed = true;
+                            }
+
+                            if (appliedBleed && (ability.extraBleedTicks() > 0 || ability.extraBleedDamage() > 0)) {
+                                bleedTicks += ability.extraBleedTicks();
+                                bleedDamage += ability.extraBleedDamage();
+                            }
+                        }
+                        
+                        if (appliedBleed && enemy.robot().isAlive()) {
+                            enemy.robot().applyBleed(bleedTicks, bleedDamage);
+                            logs.add(String.format("(SANGRAMENTO) %s foi afligido por %d turnos.",
+                                    enemy.name(), bleedTicks));
+                        }
+                        
+                        // Cura ou bônus defensivo após o ataque, se existir
+                        if (useSpecial && ability != null) {
+                            if (ability.selfHeal() > 0) {
+                                current.robot().heal(ability.selfHeal());
+                                logs.add(String.format("%s se curou em %d HP. HP atual: %d",
+                                        current.name(), ability.selfHeal(), current.robot().getHp()));
+                            }
+                            if (ability.grantGuard()) {
+                                current.robot().setGuarding(true);
+                                logs.add(current.name() + " entrou em postura defensiva!");
+                            }
+                            if (!ability.activationMessage().isBlank()) {
+                                logs.add(0, ability.activationMessage());
+                            }
+                        }
+                        
+                        String statusLabel = "";
+                        if (appliedBleed) {
+                            statusLabel = (guaranteedPoison) ? "ENVENENADO" : "SANGRAMENTO";
+                        }
+                        event = new BattleEvent(res.critical, false, wasDefended, useSpecial, 
+                                              appliedBleed, dmg, current.name(), enemy.name(), statusLabel);
+                    }
                 }
             }
         }

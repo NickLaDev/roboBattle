@@ -22,6 +22,8 @@ import javafx.scene.control.*;
 import javafx.scene.effect.DropShadow;
 import javafx.scene.image.Image;
 import javafx.scene.image.ImageView;
+import javafx.scene.image.PixelReader;
+import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
@@ -914,6 +916,9 @@ public class GameFX extends Application {
      * Tela de upgrade entre fases.
      */
     private void showUpgradeScreen() {
+        // Ao sair da bossfight, volta para a música de menu
+        audio.playMenuMusic();
+
         // Reutiliza a tela de loja, mas com título diferente e sem permitir trocar
         // personagem
         showShopScreen(p1, false, true);
@@ -1417,7 +1422,7 @@ public class GameFX extends Application {
             abilityLabel.setText("Habilidade: " + cc.ability().name());
             desc.setText(cc.description());
             try {
-                portrait.setImage(load(cc.portraitPath()));
+                portrait.setImage(loadPortrait(cc.portraitPath()));
             } catch (IllegalArgumentException e) {
                 portrait.setImage(null);
             }
@@ -1474,6 +1479,24 @@ public class GameFX extends Application {
             throw new IllegalArgumentException("Recurso não encontrado: " + path +
                     " (confira src/main/resources e o nome do arquivo).");
         return new Image(is, 0, 0, false, false);
+    }
+    
+    /**
+     * Carrega a imagem do personagem para o menu. Se for um spritesheet horizontal
+     * (caso do Shinobi), recorta o primeiro frame para evitar mostrar a tira inteira.
+     */
+    private Image loadPortrait(String path) {
+        Image img = load(path);
+        double w = img.getWidth();
+        double h = img.getHeight();
+        if (h > 0 && w / h >= 2.0) { // parece uma tira horizontal
+            int frameW = (int) Math.round(h); // usa altura como largura do frame
+            PixelReader pr = img.getPixelReader();
+            if (pr != null && frameW > 0 && frameW <= w) {
+                return new WritableImage(pr, 0, 0, frameW, (int) h);
+            }
+        }
+        return img;
     }
 
     // ---- strip de itens com badge de preço e seleção estilizada ----

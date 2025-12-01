@@ -29,7 +29,8 @@ public final class AudioManager {
     }
 
     private static final String MENU_THEME = "/assets/audio/awesomeness.wav";
-    private static final String DEFAULT_BATTLE_THEME = "/assets/audio/battle_default.wav";
+    // Música genérica usada no PvP e como fallback de batalha
+    private static final String DEFAULT_BATTLE_THEME = "/assets/audio/boss2.mp3";
 
     private static final AudioManager INSTANCE = new AudioManager();
 
@@ -52,10 +53,10 @@ public final class AudioManager {
     }
 
     private void registerBossThemes() {
-        bossThemes.put("Converted Vampire", "/assets/audio/boss_converted_vampire.wav");
-        bossThemes.put("Vampire Girl", "/assets/audio/boss_vampire_girl.wav");
-        bossThemes.put("Samurai Commander", "/assets/audio/boss_samurai_commander.wav");
-        bossThemes.put("Countess Vampire", "/assets/audio/boss_countess_vampire.wav");
+        bossThemes.put("Converted Vampire", "/assets/audio/boss1.wav");
+        bossThemes.put("Vampire Girl", "/assets/audio/boss2.mp3");
+        bossThemes.put("Samurai Commander", "/assets/audio/boss3.mp3");
+        bossThemes.put("Countess Vampire", "/assets/audio/finalboss.mp3");
     }
 
     private void loadSfx() {
