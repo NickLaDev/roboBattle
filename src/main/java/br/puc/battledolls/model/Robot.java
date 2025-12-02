@@ -26,6 +26,8 @@ public class Robot {
     // Sangramento
     private int bleedTicks = 0;
     private int bleedDamage = 0;
+    private boolean poisoned = false;
+    private String bleedLabel = null;
     
     // Escudo/Barreira (absorve dano antes do HP)
     private int shield = 0;
@@ -137,20 +139,55 @@ public class Robot {
 
     // Sangramento
     public void applyBleed(int ticks, int damagePerTick) {
+        applyBleed(ticks, damagePerTick, false);
+    }
+
+    public void applyBleed(int ticks, int damagePerTick, boolean asPoison) {
+        if (asPoison) {
+            // Veneno do Shinobi: aplica contagem exata, sem acumular
+            this.bleedTicks = Math.max(0, ticks);
+            this.bleedDamage = Math.max(0, damagePerTick);
+            this.poisoned = true;
+            this.bleedLabel = "ENVENENAMENTO";
+            return;
+        }
+
         // Acumula re-aplicação: renova com o maior entre os valores
         this.bleedTicks = Math.max(this.bleedTicks, ticks);
         this.bleedDamage = Math.max(this.bleedDamage, damagePerTick);
+        boolean hadPoison = this.poisoned && this.bleedTicks > 0;
+        if (asPoison) {
+            this.poisoned = true;
+            this.bleedLabel = "ENVENENAMENTO";
+        } else {
+            // Se já estava envenenado, mantém o rótulo; caso contrário vira sangramento
+            this.poisoned = hadPoison;
+            this.bleedLabel = hadPoison ? "ENVENENAMENTO" : "SANGRAMENTO";
+        }
     }
 
     /** Aplica um tick de bleed, se houver. Retorna o dano aplicado. */
     public int tickBleed() {
-        if (bleedTicks <= 0) return 0;
+        if (bleedTicks <= 0) {
+            poisoned = false;
+            bleedLabel = null;
+            return 0;
+        }
         takeDamage(bleedDamage);
         bleedTicks--;
+        if (bleedTicks <= 0) {
+            poisoned = false;
+            bleedLabel = null;
+        }
         return bleedDamage;
     }
 
     public boolean isBleeding() { return bleedTicks > 0; }
+    public boolean isPoisoned() { return bleedTicks > 0 && poisoned; }
+    public String getBleedLabel() {
+        if (!isBleeding()) return null;
+        return (bleedLabel == null || bleedLabel.isBlank()) ? "SANGRAMENTO" : bleedLabel;
+    }
     
     // Escudo/Barreira
     public int getShield() { return shield; }

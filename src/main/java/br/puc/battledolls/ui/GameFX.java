@@ -25,6 +25,8 @@ import javafx.scene.image.ImageView;
 import javafx.scene.image.PixelReader;
 import javafx.scene.image.WritableImage;
 import javafx.scene.input.KeyCode;
+import javafx.scene.input.MouseButton;
+import javafx.scene.input.MouseEvent;
 import javafx.scene.layout.*;
 import javafx.scene.paint.Color;
 import javafx.scene.text.Font;
@@ -655,6 +657,13 @@ public class GameFX extends Application {
         VBox potionGrid = new VBox(15);
         potionGrid.setAlignment(Pos.CENTER);
 
+        // Dica de interação (comprar/remover)
+        Label hint = new Label("Clique esquerdo: comprar • Clique direito: devolver");
+        hint.setTextFill(Color.web("#C3C7E5"));
+        hint.setStyle("-fx-font-size: 12px;");
+        hint.setAlignment(Pos.CENTER);
+        potionGrid.getChildren().add(hint);
+
         for (Potion.Type type : Potion.Type.values()) {
             HBox typeRow = new HBox(10);
             typeRow.setAlignment(Pos.CENTER);
@@ -727,23 +736,39 @@ public class GameFX extends Application {
                 btnContent.getChildren().addAll(icon, levelLabel, descLabel, costLabel, countLabel);
                 btn.setGraphic(btnContent);
 
-                // Desabilita se não tiver créditos
+                // Desabilita só se não puder comprar e não tiver nenhuma para devolver
                 boolean canAfford = credits >= cost;
-                btn.setDisable(!canAfford);
-                if (!canAfford) {
+                boolean hasPotion = count > 0;
+                boolean enabled = canAfford || hasPotion;
+                btn.setDisable(!enabled);
+                if (!enabled) {
                     btn.setOpacity(0.5);
+                } else {
+                    btn.setOpacity(1.0);
                 }
 
                 // Tooltip com descrição
-                Tooltip tooltip = new Tooltip(description + "\nCusto: " + cost + " créditos");
+                Tooltip tooltip = new Tooltip(description + "\nCusto: " + cost + " créditos"
+                        + "\nClique esquerdo: comprar\nClique direito: devolver");
                 Tooltip.install(btn, tooltip);
 
                 btn.setOnAction(e -> {
                     if (player.buyPotion(potion)) {
-                        // Atualiza a tela
                         showPotionShopScreen(player, isFirstPlayer);
                     } else {
                         alert("Créditos insuficientes!");
+                    }
+                });
+
+                btn.addEventFilter(MouseEvent.MOUSE_CLICKED, evt -> {
+                    if (evt.getButton() == MouseButton.SECONDARY) {
+                        boolean refunded = player.refundPotion(potion);
+                        if (refunded) {
+                            showPotionShopScreen(player, isFirstPlayer);
+                        } else {
+                            alert("Nenhuma poção deste nível para remover.");
+                        }
+                        evt.consume();
                     }
                 });
 
@@ -967,6 +992,13 @@ public class GameFX extends Application {
         VBox potionGrid = new VBox(15);
         potionGrid.setAlignment(Pos.CENTER);
 
+        // Dica de interação (comprar/remover)
+        Label hint = new Label("Clique esquerdo: comprar • Clique direito: devolver");
+        hint.setTextFill(Color.web("#C3C7E5"));
+        hint.setStyle("-fx-font-size: 12px;");
+        hint.setAlignment(Pos.CENTER);
+        potionGrid.getChildren().add(hint);
+
         for (Potion.Type type : Potion.Type.values()) {
             HBox typeRow = new HBox(10);
             typeRow.setAlignment(Pos.CENTER);
@@ -1039,23 +1071,39 @@ public class GameFX extends Application {
                 btnContent.getChildren().addAll(icon, levelLabel, descLabel, costLabel, countLabel);
                 btn.setGraphic(btnContent);
 
-                // Desabilita se não tiver créditos
+                // Desabilita só se não puder comprar e não tiver nenhuma para devolver
                 boolean canAfford = credits >= cost;
-                btn.setDisable(!canAfford);
-                if (!canAfford) {
+                boolean hasPotion = count > 0;
+                boolean enabled = canAfford || hasPotion;
+                btn.setDisable(!enabled);
+                if (!enabled) {
                     btn.setOpacity(0.5);
+                } else {
+                    btn.setOpacity(1.0);
                 }
 
                 // Tooltip com descrição
-                Tooltip tooltip = new Tooltip(description + "\nCusto: " + cost + " créditos");
+                Tooltip tooltip = new Tooltip(description + "\nCusto: " + cost + " créditos"
+                        + "\nClique esquerdo: comprar\nClique direito: devolver");
                 Tooltip.install(btn, tooltip);
 
                 btn.setOnAction(e -> {
                     if (player.buyPotion(potion)) {
-                        // Atualiza a tela
                         showPotionShopScreenForCampaign(player);
                     } else {
                         alert("Créditos insuficientes!");
+                    }
+                });
+
+                btn.addEventFilter(MouseEvent.MOUSE_CLICKED, evt -> {
+                    if (evt.getButton() == MouseButton.SECONDARY) {
+                        boolean refunded = player.refundPotion(potion);
+                        if (refunded) {
+                            showPotionShopScreenForCampaign(player);
+                        } else {
+                            alert("Nenhuma poção deste nível para remover.");
+                        }
+                        evt.consume();
                     }
                 });
 
@@ -1164,7 +1212,7 @@ public class GameFX extends Application {
         final double IMG_W = bg.getWidth();
         final double IMG_H = bg.getHeight();
 
-        Pane board = new Pane();
+        StackPane board = new StackPane();
         board.setPrefSize(IMG_W, IMG_H);
         board.setBackground(new Background(new BackgroundImage(
                 bg, BackgroundRepeat.NO_REPEAT, BackgroundRepeat.NO_REPEAT,
@@ -1180,17 +1228,19 @@ public class GameFX extends Application {
         DropShadow titleGlow = new DropShadow(40, Color.web("#F87171"));
         titleGlow.setSpread(0.3);
         title.setEffect(titleGlow);
-        title.setLayoutX((IMG_W - 400) / 2);
-        title.setLayoutY(IMG_H * 0.4);
+        title.setTextAlignment(javafx.scene.text.TextAlignment.CENTER);
+        title.setAlignment(Pos.CENTER);
 
         Button btnMenu = createModeButton("VOLTAR AO MENU", "#60a5fa");
         btnMenu.setPrefWidth(300);
         btnMenu.setPrefHeight(50);
-        btnMenu.setLayoutX((IMG_W - 300) / 2);
-        btnMenu.setLayoutY(IMG_H * 0.6);
         btnMenu.setOnAction(e -> showModeSelectionScreen());
 
-        board.getChildren().addAll(title, btnMenu);
+        VBox container = new VBox(24, title, btnMenu);
+        container.setAlignment(Pos.CENTER);
+        container.setPadding(new Insets(20));
+        StackPane.setAlignment(container, Pos.CENTER);
+        board.getChildren().add(container);
 
         StackPane root = new StackPane(board);
         root.setStyle("-fx-background-color: black;");

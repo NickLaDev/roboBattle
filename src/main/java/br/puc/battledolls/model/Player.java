@@ -45,6 +45,22 @@ public class Player {
         }
         return false;
     }
+    
+    /**
+     * Remove uma poção do inventário e reembolsa o custo ao jogador.
+     */
+    public boolean refundPotion(Potion potion) {
+        int count = potionInventory.getOrDefault(potion, 0);
+        if (count > 0) {
+            potionInventory.put(potion, count - 1);
+            if (count - 1 == 0) {
+                potionInventory.remove(potion);
+            }
+            credits += potion.getCost();
+            return true;
+        }
+        return false;
+    }
 
     /**
      * Adiciona uma poção diretamente ao inventário sem custo (usado para CPU).

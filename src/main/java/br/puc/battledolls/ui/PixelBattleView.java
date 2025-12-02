@@ -942,6 +942,12 @@ public class PixelBattleView {
         
         var result = engine.perform(command); // aplica dano, troca turno, etc.
 
+        if (result.preEvents != null) {
+            for (var ev : result.preEvents) {
+                createVisualEffects(ev);
+            }
+        }
+
         // Toca sons apropriados
         if (resolvedAction == Action.SPECIAL) {
             // Som de especial já foi tocado antes (durante APPROACH)
@@ -1558,6 +1564,11 @@ public class PixelBattleView {
             System.out.println("[DEBUG] Executando DEFEND");
             // NÃO toca som aqui - o som será tocado quando o ataque for defendido
             var result = engine.perform(command);
+            if (result.preEvents != null) {
+                for (var ev : result.preEvents) {
+                    createVisualEffects(ev);
+                }
+            }
             // Cria efeito visual para defesa se necessário
             if (result.event != null && result.event.isDefended) {
                 createVisualEffects(result.event);
@@ -1581,6 +1592,11 @@ public class PixelBattleView {
                 System.out.println("[DEBUG] Criando efeitos visuais");
                 createVisualEffects(result.event);
             }
+            if (result.preEvents != null) {
+                for (var ev : result.preEvents) {
+                    createVisualEffects(ev);
+                }
+            }
 
             // Desbloqueia input após usar poção
             inputLocked = false;
@@ -1595,6 +1611,11 @@ public class PixelBattleView {
             if (ability != null && !ability.offensive()) {
                 System.out.println("[DEBUG] Especial defensivo detectado - executando sem animação/skill check");
                 var result = engine.perform(command);
+                if (result.preEvents != null) {
+                    for (var ev : result.preEvents) {
+                        createVisualEffects(ev);
+                    }
+                }
                 if (result.event != null) {
                     createVisualEffects(result.event);
                 }

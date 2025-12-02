@@ -139,6 +139,28 @@ public class CombatMechanicsTest {
     }
 
     @Test
+    public void testPoisonPersistsForFourTicks() {
+        Robot robot = createRobot(100, 30, 20, 0.0, 0.0);
+
+        assertFalse(robot.isPoisoned(), "Robô não deve estar envenenado inicialmente");
+
+        robot.applyBleed(4, 4, true);
+        assertTrue(robot.isPoisoned(), "Robô deve ficar envenenado ao aplicar veneno");
+
+        int initialHp = robot.getHp();
+        int accumulated = 0;
+        for (int i = 0; i < 4; i++) {
+            assertTrue(robot.isPoisoned(), "Ainda deve estar envenenado no tick " + (i + 1));
+            accumulated += robot.tickBleed();
+        }
+
+        assertEquals(16, accumulated, "Veneno deve causar 4 de dano por 4 turnos");
+        assertEquals(initialHp - 16, robot.getHp(), "HP deve refletir os 16 de dano de veneno");
+        assertFalse(robot.isPoisoned(), "Veneno deve acabar após 4 ticks");
+        assertFalse(robot.isBleeding(), "Não deve restar sangramento depois do veneno acabar");
+    }
+
+    @Test
     public void testSpecialCharges() {
         // Sem módulo de bateria (1 carga)
         Robot robotNoBattery = new Robot(CharacterClass.YURI, null, null, null);

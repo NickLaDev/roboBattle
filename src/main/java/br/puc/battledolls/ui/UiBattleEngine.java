@@ -7,6 +7,7 @@ import br.puc.battledolls.combat.DamageResult;
 import br.puc.battledolls.items.Potion;
 import br.puc.battledolls.model.Player;
 import br.puc.battledolls.model.AbilityEffect;
+import br.puc.battledolls.model.CharacterClass;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -56,10 +57,12 @@ public class UiBattleEngine {
         public final List<String> logs = new ArrayList<>();
         public final Snapshot snapshot;
         public final BattleEvent event; // Evento visual do último ataque
+        public final List<BattleEvent> preEvents; // Eventos que ocorrem antes da ação (ex.: sangramento/veneno no início do turno)
 
-        StepResult(Snapshot s, BattleEvent event) {
+        StepResult(Snapshot s, BattleEvent event, List<BattleEvent> preEvents) {
             this.snapshot = s;
             this.event = event;
+            this.preEvents = preEvents;
         }
     }
     
@@ -188,22 +191,22 @@ public class UiBattleEngine {
         Action action = command.action();
         List<String> logs = new ArrayList<>();
         BattleEvent event = BattleEvent.none();
+        List<BattleEvent> preEvents = new ArrayList<>();
         
         if (finished)
-            return pack(logs, event);
+            return pack(logs, event, preEvents);
 
         // Atualiza efeitos temporários (fúria) no início do turno
         current.robot().tickTemporaryEffects();
 
-        // Tick de sangramento no INÍCIO do turno do current
-        int bleedTick = current.robot().tickBleed();
-        if (bleedTick > 0) {
-            logs.add(String.format("(SANGRAMENTO) %s sofre %d de dano. HP=%d",
-                    current.name(), bleedTick, current.robot().getHp()));
-            if (!current.robot().isAlive()) {
-                finish(enemy.name(), logs);
-                return pack(logs, event);
-            }
+        // Tick de sangramento/veneno para ambos no início de cada turno
+        if (applyOngoingDamage(current, enemy, logs, preEvents)) {
+            finish(enemy.name(), logs);
+            return pack(logs, event, preEvents);
+        }
+        if (applyOngoingDamage(enemy, current, logs, preEvents)) {
+            finish(current.name(), logs);
+            return pack(logs, event, preEvents);
         }
 
         logs.add(String.format("[Round %d] %s (%d HP) vs %s (%d HP)",
@@ -215,7 +218,7 @@ public class UiBattleEngine {
             case USE_POTION -> {
                 if (potion == null || !current.usePotion(potion)) {
                     logs.add(current.name() + " tentou usar uma poção, mas não possui.");
-                    return pack(logs, event);
+                    return pack(logs, event, preEvents);
                 }
                 
                 // Aplica efeito da poção
@@ -336,10 +339,12 @@ public class UiBattleEngine {
                         int bleedTicks = 0;
                         int bleedDamage = 0;
                         boolean appliedBleed = false;
+                        boolean shinobiPoison = false;
+                        boolean isShinobi = current.robot().characterClass() == CharacterClass.SHINOBI;
 
                         // Crítico padrão aplica 2x3 se algum dano passou
                         if (res.applyBleed && dmg > 0) {
-                            bleedTicks = 2;
+                            bleedTicks = 1; // sangramento crítico dura apenas 1 turno
                             bleedDamage = 3;
                             appliedBleed = true;
                         }
@@ -348,9 +353,9 @@ public class UiBattleEngine {
                         if (useSpecial && ability != null) {
                             Integer guaranteedTicks = ability.guaranteedBleedTicks();
                             Integer guaranteedDamage = ability.guaranteedBleedDamage();
-                            if (guaranteedTicks != null && guaranteedDamage != null) {
-                                bleedTicks = Math.max(bleedTicks, guaranteedTicks);
-                                bleedDamage = Math.max(bleedDamage, guaranteedDamage);
+                            if (isShinobi && guaranteedTicks != null && guaranteedDamage != null) {
+                                bleedTicks = guaranteedTicks;
+                                bleedDamage = guaranteedDamage;
                                 appliedBleed = true;
                             }
 
@@ -361,9 +366,24 @@ public class UiBattleEngine {
                         }
                         
                         if (appliedBleed && enemy.robot().isAlive()) {
-                            enemy.robot().applyBleed(bleedTicks, bleedDamage);
-                            logs.add(String.format("(SANGRAMENTO) %s foi afligido por %d turnos.",
-                                    enemy.name(), bleedTicks));
+                            shinobiPoison = isShinobi && guaranteedPoison && useSpecial;
+                            enemy.robot().applyBleed(bleedTicks, bleedDamage, shinobiPoison);
+                            String statusLabel = shinobiPoison ? "ENVENENAMENTO" : "SANGRAMENTO";
+                            logs.add(String.format("(%s) %s foi afligido por %d turnos.",
+                                    statusLabel, enemy.name(), bleedTicks));
+                            if (shinobiPoison) {
+                                int poisonHit = enemy.robot().tickBleed();
+                                if (poisonHit > 0) {
+                                    logs.add(String.format("(ENVENENAMENTO) %s sofre %d de dano imediato. HP=%d",
+                                            enemy.name(), poisonHit, enemy.robot().getHp()));
+                                    preEvents.add(new BattleEvent(false, false, false, true, true, poisonHit,
+                                            current.name(), enemy.name(), "ENVENENAMENTO"));
+                                    if (!enemy.robot().isAlive()) {
+                                        finish(current.name(), logs);
+                                        return pack(logs, event, preEvents);
+                                    }
+                                }
+                            }
                         }
                         
                         // Cura ou bônus defensivo após o ataque, se existir
@@ -384,7 +404,7 @@ public class UiBattleEngine {
                         
                         String statusLabel = "";
                         if (appliedBleed) {
-                            statusLabel = (guaranteedPoison) ? "ENVENENADO" : "SANGRAMENTO";
+                            statusLabel = shinobiPoison ? "ENVENENADO" : "SANGRAMENTO";
                         }
                         event = new BattleEvent(res.critical, false, wasDefended, useSpecial, 
                                               appliedBleed, dmg, current.name(), enemy.name(), statusLabel);
@@ -395,7 +415,7 @@ public class UiBattleEngine {
 
         if (!enemy.robot().isAlive()) {
             finish(current.name(), logs);
-            return pack(logs, event);
+            return pack(logs, event, preEvents);
         }
 
         // Adiciona carga ao especial do jogador atual
@@ -414,7 +434,27 @@ public class UiBattleEngine {
         current = enemy;
         enemy = tmp;
         round++;
-        return pack(logs, event);
+        return pack(logs, event, preEvents);
+    }
+
+    /**
+     * Aplica dano recorrente (sangramento/veneno) ao alvo, registrando logs/eventos.
+     * @return true se o alvo morreu após o tick.
+     */
+    private boolean applyOngoingDamage(Player target, Player other, List<String> logs, List<BattleEvent> preEvents) {
+        String bleedLabel = target.robot().getBleedLabel();
+        int bleedTick = target.robot().tickBleed();
+        if (bleedTick > 0) {
+            String statusLabel = (bleedLabel != null) ? bleedLabel : "SANGRAMENTO";
+            logs.add(String.format("(%s) %s sofre %d de dano. HP=%d",
+                    statusLabel, target.name(), bleedTick, target.robot().getHp()));
+            preEvents.add(new BattleEvent(false, false, false, false, true, bleedTick,
+                    other.name(), target.name(), statusLabel));
+            if (!target.robot().isAlive()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void finish(String winner, List<String> logs) {
@@ -423,8 +463,8 @@ public class UiBattleEngine {
         logs.add("\n*** VENCEDOR: " + winner + " ***");
     }
 
-    private StepResult pack(List<String> logs, BattleEvent event) {
-        StepResult sr = new StepResult(snapshot(), event);
+    private StepResult pack(List<String> logs, BattleEvent event, List<BattleEvent> preEvents) {
+        StepResult sr = new StepResult(snapshot(), event, preEvents);
         sr.logs.addAll(logs);
         return sr;
     }
